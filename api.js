@@ -13,7 +13,10 @@ const ok = ({ data, error }) => { if (error) throw error; return data; };
 // ── Auth ────────────────────────────────────────────────────────────────────
 export const getSession = async () => (await sb.auth.getSession()).data.session;
 
-export function sendLink(email) {
+export async function sendLink(email) {
+  // Only members get an email. If the check itself fails (e.g. SQL not installed yet), go on.
+  const { data: allowed, error } = await sb.rpc('is_allowed_email', { addr: email });
+  if (!error && allowed === false) throw new Error('not-a-member');
   const redirect = location.origin + location.pathname;
   return sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } }).then(ok);
 }

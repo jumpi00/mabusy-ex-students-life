@@ -57,6 +57,7 @@ const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').match
 // Supabase/network errors → sentences people can act on.
 function friendly(err) {
   const m = String(err?.message ?? err ?? '');
+  if (m === 'not-a-member') return "This email isn't on the list. Check it for typos, or ask the admin to add you.";
   if (/row-level security|violates row|permission denied/i.test(m)) return 'This call is closed or already unlocked, so changes can no longer be saved.';
   if (/failed to fetch|networkerror|load failed|network request failed|timeout/i.test(m)) return 'Connection problem. Check your internet and try again.';
   if (/calls_number_key|duplicate key/i.test(m)) return 'A call with this number already exists. Choose another number.';
