@@ -40,6 +40,7 @@ h1.label, h2.label { font-weight: 400; }
 .label a { color: var(--fg); }
 .count { font-size: 12px; color: var(--muted); vertical-align: .9em; margin-left: 2px; letter-spacing: .04em; }
 .msg { color: var(--danger); font-size: 13px; min-height: 1.3em; }
+.msg.ok { color: var(--fg); }
 
 /* Header + bottom bar */
 .top { position: sticky; top: 0; z-index: 20; padding: 22px var(--gutter); background: linear-gradient(var(--bg) 70%, transparent); pointer-events: none; }

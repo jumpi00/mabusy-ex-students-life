@@ -1,5 +1,5 @@
-import * as api from './api.js';
-import { SITE_NAME } from './config.js';
+import * as api from './api.js?v=202610091208';
+import { SITE_NAME } from './config.js?v=202610091208';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -266,11 +266,12 @@ function viewLogin(msg = '') {
   let email = '';
   fe.onsubmit = async e => {
     e.preventDefault();
+    m.classList.remove('ok');
     email = fe.email.value.trim().toLowerCase();
     m.textContent = 'Sending…';
     try {
       await api.sendLink(email);
-      fe.hidden = true; fc.hidden = false; m.textContent = `Sent to ${email}.`;
+      fe.hidden = true; fc.hidden = false; m.classList.add('ok'); m.textContent = `Sent to ${email}.`;
       fc.code.focus();
     } catch (err) { m.textContent = friendly(err); }
   };
