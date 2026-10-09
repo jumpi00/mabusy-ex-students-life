@@ -1,5 +1,5 @@
-import * as api from './api.js?v=202610091217';
-import { SITE_NAME } from './config.js?v=202610091217';
+import * as api from './api.js?v=202610091441';
+import { SITE_NAME } from './config.js?v=202610091441';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -1113,12 +1113,14 @@ async function startShow(call, together) {
   // Explicit aspect ratio so panels have their final width before the image loads.
   const showImg = it => `<img data-src="${esc(it.path)}" alt="${esc(altOf(it))}" style="aspect-ratio:${it.w || 4}/${it.h || 3}">`;
 
+  const cap = it => (it.text ? `<figcaption class="show-cap">${esc(it.text)}</figcaption>` : '');
+
   function panels(p, i) {
     const selfie = p.items.find(x => x.qid === 'selfie');
     let html = `
       <section class="panel intro">
         <div><p class="label">[${i + 1}/${people.length}]</p><h2 class="who-name">${esc(p.name)}</h2></div>
-        ${selfie ? showImg(selfie) : ''}
+        ${selfie ? `<figure class="show-fig">${showImg(selfie)}${cap(selfie)}</figure>` : ''}
       </section>`;
     qs.forEach((q, qi) => {
       if (q.id === 'selfie') return;
@@ -1128,7 +1130,7 @@ async function startShow(call, together) {
       if (qType(q) === 'photo') {
         its.forEach((it, k) => {
           html += `<section class="panel ph">${k ? '<p class="label">&nbsp;</p>' : head}
-            ${showImg(it)}<p class="small">${esc(it.text) || '&nbsp;'}</p></section>`;
+            <figure class="show-fig">${showImg(it)}${cap(it)}</figure></section>`;
         });
       } else if (qType(q) === 'link') {
         html += `<section class="panel txt">${head}${its.map(it => `
