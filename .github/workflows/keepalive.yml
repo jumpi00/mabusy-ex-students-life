@@ -1,0 +1,28 @@
+# Free Supabase projects pause after ~7 days without activity: ping the API every 3 days.
+# GitHub also disables scheduled workflows after 60 days without commits, so once a
+# month this job commits a timestamp to keep itself alive.
+name: keepalive
+on:
+  schedule:
+    - cron: '17 6 */3 * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          curl -fsS "https://odeqxbrkacgkcgmfwqpx.supabase.co/rest/v1/calls?select=id&limit=1" \
+            -H "apikey: sb_publishable_V8NZJWRhNFDCtGYfzr05sA_8KDf2P94" -o /dev/null -w "%{http_code}\n"
+      - uses: actions/checkout@v4
+      - name: Monthly heartbeat commit
+        run: |
+          month=$(date -u +%Y-%m)
+          if [ "$(cat .github/heartbeat 2>/dev/null)" != "$month" ]; then
+            echo "$month" > .github/heartbeat
+            git config user.name "keepalive-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add .github/heartbeat && git commit -m "keepalive $month" && git push
+          fi
