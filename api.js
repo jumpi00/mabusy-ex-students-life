@@ -39,6 +39,9 @@ export const listPhotos = (callId) => {
   if (callId) q = q.eq('call_id', callId);
   return q.then(ok);
 };
+// Only my own rows: which calls I've started / submitted.
+export const mySubmissions = (userId) =>
+  sb.from('submissions').select('call_id,submitted_at').eq('user_id', userId).then(ok);
 export const callProgress = (callId) => sb.rpc('call_progress', { cid: callId }).then(ok);
 
 // ── Writes (members) ───────────────────────────────────────────────────────

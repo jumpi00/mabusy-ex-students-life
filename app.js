@@ -10,7 +10,7 @@ const slug = s => String(s || '').toLowerCase().normalize('NFD').replace(/[^a-z0
 
 const app = $('#app');
 const bar = $('#bar');
-const state = { session: null, me: null, members: [], calls: [] };
+const state = { session: null, me: null, members: [], calls: [], mine: new Map() };
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 // ── Formatting ─────────────────────────────────────────────────────────────
@@ -42,6 +42,9 @@ const isRevealed = c => new Date(c.reveal_at) <= Date.now();
 const isAccepting = c => c.is_open && !isRevealed(c);
 const callName = c => `Call_${pad(c.number)}`;
 const statusOf = c => (isRevealed(c) ? 'Unlocked' : isAccepting(c) ? 'Open' : 'Locked');
+// Calls still waiting for my contribution: open, and not submitted yet (nothing, or only a draft).
+const pendingCalls = () => [...state.calls].reverse().filter(c => isAccepting(c) && !state.mine.get(c.id));
+const isDraft = c => state.mine.has(c.id);
 const member = email => state.members.find(m => m.email.toLowerCase() === String(email).toLowerCase());
 const nameOf = email => member(email)?.name ?? 'Someone';
 const sortOf = email => member(email)?.sort ?? 99;
@@ -235,16 +238,22 @@ async function viewHome() {
   setTitle('');
   setBar('Index');
   const calls = state.calls;
-  const next = [...calls].reverse().find(c => !isRevealed(c));
+  const pending = pendingCalls();
+  const due = pending[0];
+  const next = due ?? [...calls].reverse().find(c => !isRevealed(c));
   app.innerHTML = `
     <section class="index">
       <div class="col">
         <p class="label">[Calls]</p>
         <ul class="big"><li><a href="#/calls">Datasheet</a> <span class="count">(${calls.length})</span></li></ul>
         <ul class="big gap">${calls.slice(0, 6).map(c => `
-          <li><a href="#/call/${c.number}">${callName(c)}</a> <span class="count">${statusOf(c)}</span></li>`).join('')}
+          <li><a href="#/call/${c.number}">${callName(c)}</a> ${pending.includes(c) ? '<span class="count alert">Upload due</span>' : `<span class="count">${statusOf(c)}</span>`}</li>`).join('')}
         </ul>
-        ${next ? `<p class="small next">Next unlock: <a href="#/call/${next.number}">${callName(next)}</a><br>
+        ${next ? `<p class="small next ${due ? 'alert' : ''}">
+          ${due
+            ? `Upload open: <a href="#/call/${due.number}">${callName(due)}</a><br>
+               ${isDraft(due) ? 'Your contribution is a draft: submit it' : 'Your contribution is missing'} before<br>`
+            : `Next unlock: <a href="#/call/${next.number}">${callName(next)}</a><br>`}
           ${esc(fmtDate(next.reveal_at))} · <span data-countdown="${next.reveal_at}">${countdown(new Date(next.reveal_at) - Date.now())}</span></p>` : ''}
       </div>
       <div class="col">
@@ -268,7 +277,7 @@ async function viewHome() {
   const label = Object.fromEntries(MATERIALS);
   $('#mat').innerHTML = groups.map(g => `<ul class="big">${g.map(k => `
     <li><a href="#/m/${k}">${label[k]}</a> <span class="count">(${data[k].length})</span></li>`).join('')}</ul>`).join('');
-  splash([...data.selfie, ...data.photo]);
+  if (!pending.length) splash([...data.selfie, ...data.photo]);
 }
 
 // Opening collage, once per session, like the AS landing.
@@ -506,6 +515,7 @@ async function renderForm(call, root, onProgress = () => {}) {
       const row = await api.saveSubmission(call.id, uid, { answers: payload(), ...fields });
       started = true;
       submittedAt = row.submitted_at;
+      state.mine.set(call.id, submittedAt);
       if (reopened) {
         showErrors(missing());
         drawState('!A required answer is missing: this is a draft again');
@@ -835,13 +845,48 @@ async function boot() {
     try {
       [state.members, state.calls] = await Promise.all([api.listMembers(), api.listCalls()]);
       state.me = member(state.session.user.email) ?? null;
+      if (state.me) {
+        const mine = await api.mySubmissions(state.session.user.id);
+        state.mine = new Map(mine.map(r => [r.call_id, r.submitted_at]));
+      }
     } catch (e) {
       app.innerHTML = `<p class="msg center pad">Could not reach the archive: ${esc(e.message)}</p>`;
       return;
     }
   }
   if (!state.session && hashErr) return viewLogin(hashErr);
-  route();
+  await route();
+  if (state.me) promptPending();
+}
+
+// Pop-up reminder when a call is open and I haven't submitted yet (once per session per call).
+function promptPending() {
+  const call = pendingCalls()[0];
+  if (!call || location.hash === `#/call/${call.number}`) return;
+  const key = `mabusy:prompt:${call.id}`;
+  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch {}
+  const el = document.createElement('div');
+  el.className = 'modal';
+  el.innerHTML = `
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <p class="label alert">[Upload open]</p>
+      <p class="lead" id="modal-title">${callName(call)}${call.title ? ` · ${esc(call.title)}` : ''} is open.</p>
+      <p>${isDraft(call)
+        ? "Your contribution is still a draft. Finish it and press Submit."
+        : "You haven't uploaded anything yet. Add your selfie and answers."}</p>
+      <p class="small alert">Before ${esc(fmtDate(call.reveal_at))} · <span data-countdown="${call.reveal_at}">${countdown(new Date(call.reveal_at) - Date.now())}</span> left</p>
+      <div class="row">
+        <a class="btn" href="#/call/${call.number}">Add my contribution</a>
+        <button type="button" class="link" data-close>Later</button>
+      </div>
+    </div>`;
+  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('hashchange', close); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-close]')) close(); });
+  document.addEventListener('keydown', onKey);
+  window.addEventListener('hashchange', close);
+  document.body.append(el);
+  $('.btn', el).focus();
 }
 
 window.addEventListener('hashchange', route);

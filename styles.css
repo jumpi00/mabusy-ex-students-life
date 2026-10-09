@@ -170,6 +170,15 @@ select.line { width: auto; }
 .admin .sheet { margin-top: 20px; }
 .admin .sheet a { text-decoration: underline; text-underline-offset: 3px; }
 
+/* Pending upload */
+.alert, .label.alert, .count.alert { color: var(--danger); }
+.alert a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.modal { position: fixed; inset: 0; z-index: 60; background: rgba(255, 255, 255, .86); display: flex; align-items: center; justify-content: center; padding: var(--gutter); }
+.modal-card { background: var(--bg); border: 1px solid var(--line); padding: 28px; max-width: 460px; width: 100%; }
+.modal-card p { margin: 0 0 14px; font-size: 14px; line-height: 1.5; }
+.modal-card .lead { font-size: 20px; margin-bottom: 12px; }
+.modal-card .row { margin-top: 22px; }
+
 /* Lightbox */
 .lb { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; grid-template-rows: auto 1fr auto; }
 .lb-close { justify-self: end; margin: 22px var(--gutter); }
