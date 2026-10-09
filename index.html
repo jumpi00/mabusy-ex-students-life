@@ -16,14 +16,14 @@
   <header class="top"><a href="#/" class="logo">MABusy[ex]Students_life</a></header>
   <main id="app"><p class="muted center pad">Loading…</p></main>
   <nav id="bar" class="bar"></nav>
-  <div id="lb" class="lb" hidden>
+  <div id="lb" class="lb" hidden role="dialog" aria-modal="true" aria-label="Photo viewer">
     <button class="lb-close link" aria-label="Close">Close</button>
     <div class="lb-stage"><img alt=""></div>
     <div class="lb-foot">
-      <button class="lb-prev link">Prev</button>
-      <span class="lb-cap"></span>
+      <button class="lb-prev link" aria-label="Previous photo">Prev</button>
+      <span class="lb-cap" aria-live="polite"></span>
       <span class="lb-count muted"></span>
-      <button class="lb-next link">Next</button>
+      <button class="lb-next link" aria-label="Next photo">Next</button>
     </div>
   </div>
   <script type="module" src="app.js"></script>

@@ -52,6 +52,43 @@ const normUrl = u => { u = u.trim(); return !u ? '' : /^https?:\/\//i.test(u) ? 
 const safeHref = u => (/^https?:\/\//i.test(u) ? u : '#');
 const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Supabase/network errors → sentences people can act on.
+function friendly(err) {
+  const m = String(err?.message ?? err ?? '');
+  if (/row-level security|violates row|permission denied/i.test(m)) return 'This call is closed or already unlocked, so changes can no longer be saved.';
+  if (/failed to fetch|networkerror|load failed|network request failed|timeout/i.test(m)) return 'Connection problem. Check your internet and try again.';
+  if (/calls_number_key|duplicate key/i.test(m)) return 'A call with this number already exists. Choose another number.';
+  if (/rate limit|security purposes|too many/i.test(m)) return 'Too many attempts. Wait a minute and try again.';
+  if (/token has expired|invalid.*token|otp/i.test(m)) return 'This code is wrong or has expired. Request a new link.';
+  if (/invalid.*email|unable to validate email/i.test(m)) return 'This email address is not valid.';
+  if (/payload too large|exceeded the maximum/i.test(m)) return 'This file is too large.';
+  if (/not an image|HEIC/i.test(m)) return m;
+  return m ? `Something went wrong (${m}).` : 'Something went wrong.';
+}
+
+// Keep keyboard focus inside an open dialog; returns a function that releases it
+// and puts focus back where it was.
+function trapFocus(container) {
+  const before = document.activeElement;
+  const sel = 'a[href], button:not([disabled]), input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])';
+  const onKey = e => {
+    if (e.key !== 'Tab') return;
+    const items = $$(sel, container).filter(el => el.offsetParent !== null || el === document.activeElement);
+    if (!items.length) return;
+    const first = items[0], last = items.at(-1);
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    else if (!container.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener('keydown', onKey);
+  return () => {
+    document.removeEventListener('keydown', onKey);
+    if (before && document.contains(before)) before.focus();
+  };
+}
+
 function setBar(crumb, middle = '', right = '') {
   bar.innerHTML = `
     <a href="#/" class="eq" aria-label="Index">=</a>
@@ -86,18 +123,23 @@ async function hydrate(root = app) {
 }
 
 const lbGroups = {};
+const altOf = item => [
+  item.qid === 'selfie' ? `Selfie of ${item.name}` : `Photo by ${item.name}${item.question ? `, ${item.question}` : ''}`,
+  item.text,
+].filter(Boolean).join(': ');
+
 function figure(item, group, i) {
   const ratio = item.w && item.h ? `${item.w}/${item.h}` : '1/1';
   return `
-    <figure class="item" data-lb="${group}" data-i="${i}">
-      <div class="box"><img data-src="${esc(item.thumb)}" alt="" loading="lazy" style="aspect-ratio:${ratio}"></div>
+    <figure class="item" data-lb="${group}" data-i="${i}" tabindex="0" role="button" aria-label="Open ${esc(altOf(item))}">
+      <div class="box"><img data-src="${esc(item.thumb)}" alt="${esc(altOf(item))}" loading="lazy" style="aspect-ratio:${ratio}"></div>
       <figcaption>${esc(item.caption)}</figcaption>
       ${item.text ? `<p class="note">${esc(item.text)}</p>` : ''}
     </figure>`;
 }
 
 const lb = $('#lb');
-let lbItems = [], lbIndex = 0;
+let lbItems = [], lbIndex = 0, lbRelease = null;
 async function showLightbox(items, i) {
   lbItems = items; lbIndex = (i + items.length) % items.length;
   const it = lbItems[lbIndex];
@@ -106,14 +148,24 @@ async function showLightbox(items, i) {
   img.removeAttribute('src');
   $('.lb-cap', lb).innerHTML = `${esc(it.caption)}${it.text ? ` — ${esc(it.text)}` : ''}`;
   $('.lb-count', lb).textContent = `${lbIndex + 1} / ${lbItems.length}`;
-  lb.hidden = false;
-  document.body.classList.add('noscroll');
+  img.alt = altOf(it);
+  if (lb.hidden) {
+    lb.hidden = false;
+    document.body.classList.add('noscroll');
+    lbRelease = trapFocus(lb);
+    $('.lb-close', lb).focus();
+  }
   const urls = await api.signedUrls([it.path]);
   if (lbItems[lbIndex] !== it) return;
   img.onload = () => img.classList.add('in');
   img.src = urls[it.path];
 }
-function closeLightbox() { lb.hidden = true; document.body.classList.remove('noscroll'); }
+function closeLightbox() {
+  if (lb.hidden) return;
+  lb.hidden = true;
+  document.body.classList.remove('noscroll');
+  lbRelease?.(); lbRelease = null;
+}
 lb.addEventListener('click', e => {
   if (e.target.closest('.lb-prev')) showLightbox(lbItems, lbIndex - 1);
   else if (e.target.closest('.lb-next')) showLightbox(lbItems, lbIndex + 1);
@@ -128,6 +180,13 @@ document.addEventListener('keydown', e => {
 app.addEventListener('click', e => {
   const f = e.target.closest('[data-lb]');
   if (f && lbGroups[f.dataset.lb]) showLightbox(lbGroups[f.dataset.lb], Number(f.dataset.i));
+});
+app.addEventListener('keydown', e => {
+  const f = e.target.closest?.('[data-lb]');
+  if (f && (e.key === 'Enter' || e.key === ' ') && lbGroups[f.dataset.lb]) {
+    e.preventDefault();
+    showLightbox(lbGroups[f.dataset.lb], Number(f.dataset.i));
+  }
 });
 
 // ── Questions ──────────────────────────────────────────────────────────────
@@ -188,18 +247,18 @@ function viewLogin(msg = '') {
   bar.innerHTML = '';
   app.innerHTML = `
     <section class="login">
-      <p class="label">[Login]</p>
+      <h1 class="label">[Login]</h1>
       <form id="f-email" class="stack">
         <p class="lead">Enter your email. You'll get a link to log in.</p>
-        <input type="email" name="email" placeholder="Email" required autocomplete="email" class="line">
+        <input type="email" name="email" placeholder="Email" aria-label="Email" required autocomplete="email" class="line">
         <button class="btn">Send link</button>
       </form>
       <form id="f-code" class="stack" hidden>
         <p class="lead">Check your inbox and open the link.<br>Or type the code from the email here:</p>
-        <input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Code" class="line" maxlength="10">
+        <input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Code" aria-label="Code from the email" class="line" maxlength="10">
         <div class="row"><button class="btn">Log in</button><button type="button" class="link" id="again">Use another email</button></div>
       </form>
-      <p class="msg" id="login-msg">${esc(msg)}</p>
+      <p class="msg" id="login-msg" role="status" aria-live="polite">${esc(msg)}</p>
     </section>`;
   const fe = $('#f-email'), fc = $('#f-code'), m = $('#login-msg');
   let email = '';
@@ -211,13 +270,13 @@ function viewLogin(msg = '') {
       await api.sendLink(email);
       fe.hidden = true; fc.hidden = false; m.textContent = `Sent to ${email}.`;
       fc.code.focus();
-    } catch (err) { m.textContent = err.message; }
+    } catch (err) { m.textContent = friendly(err); }
   };
   fc.onsubmit = async e => {
     e.preventDefault();
     m.textContent = 'Checking…';
     try { await api.verifyCode(email, fc.code.value.trim()); await boot(); }
-    catch (err) { m.textContent = err.message; }
+    catch (err) { m.textContent = friendly(err); }
   };
   $('#again').onclick = () => { fc.hidden = true; fe.hidden = false; m.textContent = ''; };
 }
@@ -242,9 +301,10 @@ async function viewHome() {
   const due = pending[0];
   const next = due ?? [...calls].reverse().find(c => !isRevealed(c));
   app.innerHTML = `
+    <h1 class="sr">${esc(SITE_NAME)}</h1>
     <section class="index">
       <div class="col">
-        <p class="label">[Calls]</p>
+        <h2 class="label">[Calls]</h2>
         <ul class="big"><li><a href="#/calls">Datasheet</a> <span class="count">(${calls.length})</span></li></ul>
         <ul class="big gap">${calls.slice(0, 6).map(c => `
           <li><a href="#/call/${c.number}">${callName(c)}</a> ${pending.includes(c) ? '<span class="count alert">Upload due</span>' : `<span class="count">${statusOf(c)}</span>`}</li>`).join('')}
@@ -257,11 +317,11 @@ async function viewHome() {
           ${esc(fmtDate(next.reveal_at))} · <span data-countdown="${next.reveal_at}">${countdown(new Date(next.reveal_at) - Date.now())}</span></p>` : ''}
       </div>
       <div class="col">
-        <p class="label">[Materials]</p>
+        <h2 class="label">[Materials]</h2>
         <div id="mat"><ul class="big">${MATERIALS.map(([k, l]) => `<li><a href="#/m/${k}">${l}</a> <span class="count">( )</span></li>`).join('')}</ul></div>
       </div>
       <div class="col small-col">
-        <p class="label">[Info]</p>
+        <h2 class="label">[Info]</h2>
         <ul class="small">
           <li><a href="#/about">About</a></li>
           ${state.me.is_admin ? '<li><a href="#/admin">Admin</a></li>' : ''}
@@ -301,6 +361,7 @@ function viewCalls() {
   setTitle('Datasheet');
   setBar('[C] Datasheet');
   app.innerHTML = `
+    <h1 class="sr">Datasheet: all calls</h1>
     <table class="sheet">
       <thead><tr><th>No</th><th>Title</th><th>Unlock</th><th>Status</th><th>Questions</th></tr></thead>
       <tbody>${state.calls.map(c => `
@@ -354,9 +415,9 @@ async function renderLocked(call, body) {
     $('#progress').innerHTML = `
       <p class="label">[Submitted ${ready}/${progress.length}]</p>
       <ul class="ready">${progress.map(p => `
-        <li class="${p.ready ? 'on' : p.started ? 'half' : ''}"><span class="dot"></span>${esc(p.name)}</li>`).join('')}
+        <li class="${p.ready ? 'on' : p.started ? 'half' : ''}"><span class="dot" aria-hidden="true"></span>${esc(p.name)}<span class="sr">: ${p.ready ? 'submitted' : p.started ? 'draft' : 'not started'}</span></li>`).join('')}
       </ul>
-      <p class="small muted legend">● submitted · ◐ draft · ○ not started</p>`;
+      <p class="small muted legend" aria-hidden="true">● submitted · ◐ draft · ○ not started</p>`;
   }
   await drawProgress();
   const mine = $('#mine');
@@ -384,7 +445,7 @@ async function renderUnlocked(call, body) {
         const list = (type === 'link' ? d.links : d.text).filter(it => it.qid === q.id);
         inner = list.length ? `<div class="grid text">${list.map(type === 'link' ? linkCard : textCard).join('')}</div>` : '';
       }
-      return inner && `<p class="label sec">[Q${qi + 1}] ${esc(q.text)}</p>${inner}`;
+      return inner && `<h2 class="label sec">[Q${qi + 1}] ${esc(q.text)}</h2>${inner}`;
     }).join('')}
     ${people.length ? '' : '<p class="muted center">Nobody uploaded anything for this call.</p>'}
     <dl class="meta">
@@ -397,7 +458,7 @@ async function renderUnlocked(call, body) {
   const play = $('#play');
   if (play) play.onclick = () => openModal(`
     <p class="label">[Play the show]</p>
-    <p class="lead">Are you all connected right now?</p>
+    <p class="lead" id="modal-title">Are you all connected right now?</p>
     <p class="small muted">Together, whoever clicks moves the show for everyone watching.</p>
     <div class="row">
       <button type="button" class="btn" data-close data-together>Yes, together</button>
@@ -446,11 +507,11 @@ async function renderForm(call, root, onProgress = () => {}) {
     const type = qType(q);
     let input = '';
     if (type === 'text') {
-      input = `<textarea data-text="${esc(q.id)}" rows="3" class="area" aria-label="${esc(q.text)}">${esc(answers[q.id])}</textarea>`;
+      input = `<textarea data-text="${esc(q.id)}" id="in-${esc(q.id)}" rows="3" class="area" aria-describedby="err-${esc(q.id)}" ${q.required ? 'aria-required="true"' : ''}>${esc(answers[q.id])}</textarea>`;
     } else if (type === 'photo') {
       input = `
         <div class="grid edit" data-photos="${esc(q.id)}"></div>
-        <label class="btn" data-add="${esc(q.id)}">Add ${q.multiple ? 'photos' : 'photo'}<input type="file" accept="image/*" ${q.multiple ? 'multiple' : ''} hidden></label>
+        <label class="btn file" data-add="${esc(q.id)}">Add ${q.multiple ? 'photos' : 'photo'}<input type="file" accept="image/*" ${q.multiple ? 'multiple' : ''} aria-describedby="err-${esc(q.id)}"></label>
         <span class="small muted">${q.multiple ? `up to ${MULTI_MAX}` : 'one photo'}</span>`;
     } else {
       input = `<div data-links="${esc(q.id)}"></div>
@@ -459,19 +520,19 @@ async function renderForm(call, root, onProgress = () => {}) {
     return `
       <div class="field" data-field="${esc(q.id)}">
         <p class="label">[Q${i + 1}] ${q.required ? '<span class="req-tag">Required</span>' : '<span class="muted">Optional</span>'}</p>
-        <p class="q">${esc(q.text)}</p>
+        ${type === 'text' ? `<label class="q" for="in-${esc(q.id)}">${esc(q.text)}</label>` : `<p class="q" id="qt-${esc(q.id)}">${esc(q.text)}</p>`}
         ${input}
-        <p class="err" data-err></p>
+        <p class="err" data-err id="err-${esc(q.id)}" role="alert"></p>
       </div>`;
   };
 
   root.innerHTML = `
     <form class="contrib" id="contrib" autocomplete="off" novalidate>
-      <p class="label">[Your contribution]</p>
+      <h2 class="label">[Your contribution]</h2>
       <p class="small muted">Only you can see this until the unlock. Everything is saved automatically as a draft: press <b>Submit</b> when you're done. You can keep editing until the unlock.</p>
       ${qs.map(field).join('') || '<p class="muted">No questions for this call.</p>'}
       <div class="submit-bar">
-        <span class="state" id="state"></span>
+        <span class="state" id="state" role="status" aria-live="polite"></span>
         <button type="submit" class="btn" id="submit">Submit</button>
       </div>
     </form>`;
@@ -490,6 +551,7 @@ async function renderForm(call, root, onProgress = () => {}) {
       const bad = list.includes(q);
       f.classList.toggle('invalid', bad);
       $('[data-err]', f).textContent = bad ? 'This answer is required.' : '';
+      for (const inp of $$('textarea, input', f)) inp.toggleAttribute('aria-invalid', bad);
     }
   }
   // Clear an error as soon as the field gets an answer.
@@ -535,7 +597,7 @@ async function renderForm(call, root, onProgress = () => {}) {
       } else drawState(`Saved ${fmtTime(new Date())}`);
       if (before !== `${started}|${!!submittedAt}`) onProgress();
     } catch (e) {
-      drawState(isAccepting(call) ? `!Not saved: ${e.message}` : '!This call is locked now');
+      drawState(`!Not saved: ${isAccepting(call) ? friendly(e) : 'this call is locked now.'}`);
       throw e;
     }
   }
@@ -552,9 +614,9 @@ async function renderForm(call, root, onProgress = () => {}) {
     const q = qs.find(x => x.id === qid);
     box.innerHTML = answers[qid].map((l, i) => `
       <div class="link-row">
-        <input class="line" data-i="${i}" data-k="url" placeholder="https://…" value="${esc(l.url)}" inputmode="url">
-        <input class="line" data-i="${i}" data-k="label" placeholder="Label (optional)" value="${esc(l.label)}">
-        ${q.multiple && answers[qid].length > 1 ? `<button type="button" class="link" data-rm="${i}" aria-label="Remove link">×</button>` : ''}
+        <input class="line" data-i="${i}" data-k="url" placeholder="https://…" value="${esc(l.url)}" inputmode="url" aria-label="Link ${i + 1} address" aria-describedby="err-${esc(qid)}">
+        <input class="line" data-i="${i}" data-k="label" placeholder="Label (optional)" value="${esc(l.label)}" aria-label="Link ${i + 1} label">
+        ${q.multiple && answers[qid].length > 1 ? `<button type="button" class="link x" data-rm="${i}" aria-label="Remove link ${i + 1}">×</button>` : ''}
       </div>`).join('');
     for (const inp of $$('input', box)) {
       inp.oninput = () => { answers[qid][inp.dataset.i][inp.dataset.k] = inp.value; recheck(); schedule(); };
@@ -578,11 +640,11 @@ async function renderForm(call, root, onProgress = () => {}) {
     const add = $(`[data-add="${CSS.escape(q.id)}"]`, root);
     add.hidden = list.length + pending >= qMax(q);
     add.nextElementSibling.hidden = add.hidden;
-    grid.innerHTML = list.map(p => `
+    grid.innerHTML = list.map((p, k) => `
       <figure class="item">
-        <div class="box"><img data-src="${esc(p.thumb)}" alt="" style="aspect-ratio:${p.w}/${p.h}"></div>
-        <input class="line cap-in" data-id="${p.id}" placeholder="Caption (optional)" value="${esc(p.caption)}">
-        <button type="button" class="link" data-del="${p.id}">Remove</button>
+        <div class="box"><img data-src="${esc(p.thumb)}" alt="Your photo ${k + 1}${p.caption ? `: ${esc(p.caption)}` : ''}" style="aspect-ratio:${p.w}/${p.h}"></div>
+        <input class="line cap-in" data-id="${p.id}" placeholder="Caption (optional)" value="${esc(p.caption)}" aria-label="Caption for photo ${k + 1}">
+        <button type="button" class="link" data-del="${p.id}" aria-label="Remove photo ${k + 1}">Remove</button>
       </figure>`).join('') + Array.from({ length: pending }, () => `
       <figure class="item"><div class="box pending"><span class="muted small">Processing…</span></div></figure>`).join('');
     hydrate(grid);
@@ -592,7 +654,7 @@ async function renderForm(call, root, onProgress = () => {}) {
         p.caption = inp.value.trim();
         drawState('Saving…');
         try { await api.updatePhoto(p.id, { caption: p.caption }); drawState(`Saved ${fmtTime(new Date())}`); }
-        catch (e) { drawState(`!Not saved: ${e.message}`); }
+        catch (e) { drawState(`!Not saved: ${friendly(e)}`); }
       };
     }
     for (const b of $$('[data-del]', grid)) {
@@ -605,7 +667,7 @@ async function renderForm(call, root, onProgress = () => {}) {
           drawPhotos(q);
           if (submittedAt && missing().length) await persist();
           else drawState(`Saved ${fmtTime(new Date())}`);
-        } catch (e) { drawState(`!Not removed: ${e.message}`); }
+        } catch (e) { drawState(`!Not removed: ${friendly(e)}`); }
       };
     }
   }
@@ -622,7 +684,7 @@ async function renderForm(call, root, onProgress = () => {}) {
         try {
           const pos = (photosFor(q.id).at(-1)?.position ?? -1) + 1;
           myPhotos.push(await api.uploadPhoto(call.id, uid, q.id, f, pos));
-        } catch (err) { alert(`${f.name}: ${err.message}`); }
+        } catch (err) { alert(`${f.name}: ${friendly(err)}`); }
         drawPhotos(q, --left);
       }
       recheck();
@@ -638,7 +700,9 @@ async function renderForm(call, root, onProgress = () => {}) {
     showErrors(miss);
     if (miss.length) {
       drawState(`!${miss.length} required ${miss.length > 1 ? 'answers are' : 'answer is'} missing`);
-      $(`[data-field="${CSS.escape(miss[0].id)}"]`, root).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const first = $(`[data-field="${CSS.escape(miss[0].id)}"]`, root);
+      first.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
+      $('textarea, input', first)?.focus({ preventScroll: true });
       return;
     }
     await persist({ submitted_at: new Date().toISOString() }).catch(() => {});
@@ -665,8 +729,8 @@ async function viewMaterial(kind) {
   const card = ([it, i]) => (isImg ? figure(it, kind, i)
     : kind === 'links' ? linkCard({ ...it, caption: `${it.caption} · ${it.question}` })
     : textCard({ ...it, caption: `${it.caption} · ${it.question}` }));
-  app.innerHTML = [...byCall].map(([call, list]) => `
-    <p class="label sec"><a href="#/call/${call.number}">[${callName(call)}]</a> ${esc(call.title)}</p>
+  app.innerHTML = `<h1 class="sr">${label}</h1>` + [...byCall].map(([call, list]) => `
+    <h2 class="label sec"><a href="#/call/${call.number}">[${callName(call)}]</a> ${esc(call.title)}</h2>
     <div class="grid ${isImg ? '' : 'text'}">${list.map(card).join('')}</div>`).join('');
   hydrate();
 }
@@ -680,9 +744,10 @@ function viewAdmin(editNumber) {
   if (editNumber !== undefined) return adminForm(editing);
   app.innerHTML = `
     <section class="admin">
+      <h1 class="sr">Admin</h1>
       <p><a href="#/admin/new" class="btn">New call</a></p>
       <table class="sheet">
-        <thead><tr><th>No</th><th>Title</th><th>Unlock</th><th>Uploads</th><th></th></tr></thead>
+        <thead><tr><th>No</th><th>Title</th><th>Unlock</th><th>Uploads</th><th><span class="sr">Actions</span></th></tr></thead>
         <tbody>${state.calls.map(c => `
           <tr>
             <td>${pad(c.number)}</td><td>${esc(c.title || '—')}</td>
@@ -709,7 +774,7 @@ function adminForm(call) {
 
   app.innerHTML = `
     <form class="admin contrib" id="call-form">
-      <p class="label">[${call ? `Edit ${callName(call)}` : 'New call'}]</p>
+      <h1 class="label">[${call ? `Edit ${callName(call)}` : 'New call'}]</h1>
       <div class="field two">
         <label>No. <input type="number" name="number" min="1" required class="line" value="${call?.number ?? nextNo}"></label>
         <label>Title <input name="title" class="line" placeholder="e.g. October" value="${esc(call?.title ?? '')}"></label>
@@ -719,7 +784,7 @@ function adminForm(call) {
         <div id="qs"></div>
         <div class="row">
           <button type="button" class="link" id="q-add">+ Add question</button>
-          ${state.calls.length ? `<select id="q-copy" class="line"><option value="">Copy questions from…</option>
+          ${state.calls.length ? `<select id="q-copy" class="line" aria-label="Copy questions from another call"><option value="">Copy questions from…</option>
             ${state.calls.filter(c => c !== call).map(c => `<option value="${c.id}">${callName(c)}</option>`).join('')}</select>` : ''}
         </div>
       </div>
@@ -738,31 +803,48 @@ function adminForm(call) {
         <a href="#/admin" class="link">Cancel</a>
         ${call ? '<button type="button" class="link danger" id="del">Delete call</button>' : ''}
       </div>
-      <p class="msg" id="admin-msg"></p>
+      <p class="msg" id="admin-msg" role="alert"></p>
     </form>`;
+
+  // How many people already started on this call (to warn before destructive edits).
+  let started = 0;
+  if (call && !isRevealed(call)) api.callProgress(call.id).then(p => { started = p.filter(x => x.started).length; }).catch(() => {});
+  else if (call) started = 1;
 
   function drawQs() {
     $('#qs').innerHTML = questions.map((q, i) => `
       <div class="q-row" data-i="${i}">
         <span class="muted qn">Q${i + 1}</span>
-        <input class="line q-text" data-k="text" value="${esc(q.text)}" placeholder="Question">
+        <input class="line q-text" data-k="text" value="${esc(q.text)}" placeholder="Question" aria-label="Question ${i + 1}">
         <div class="q-opts">
-          <select class="line" data-k="type" aria-label="Answer type">
+          <select class="line" data-k="type" aria-label="Question ${i + 1} answer type">
             ${Object.entries(TYPE_LABEL).map(([v, l]) => `<option value="${v}" ${q.type === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select>
           <label class="check sm"><input type="checkbox" data-k="required" ${q.required ? 'checked' : ''}> Required</label>
           <label class="check sm" ${q.type === 'text' ? 'style="visibility:hidden"' : ''}><input type="checkbox" data-k="multiple" ${q.multiple ? 'checked' : ''}> Several</label>
-          <button type="button" class="link" data-up aria-label="Move up" ${i ? '' : 'disabled'}>↑</button>
-          <button type="button" class="link" data-rm aria-label="Remove">×</button>
+          <button type="button" class="link x" data-up aria-label="Move question ${i + 1} up" ${i ? '' : 'disabled'}>↑</button>
+          <button type="button" class="link x" data-rm aria-label="Remove question ${i + 1}">×</button>
         </div>
       </div>`).join('') || '<p class="small muted">No questions yet.</p>';
     for (const row of $$('#qs .q-row')) {
       const q = questions[row.dataset.i];
       $('[data-k="text"]', row).oninput = e => { q.text = e.target.value; };
-      $('[data-k="type"]', row).onchange = e => { q.type = e.target.value; if (q.type === 'text') q.multiple = false; drawQs(); };
+      $('[data-k="type"]', row).onchange = e => {
+        if (started && !confirm(`${started} ${started > 1 ? 'people have' : 'person has'} already started answering. Changing the type hides existing answers to this question. Continue?`)) {
+          e.target.value = q.type;
+          return;
+        }
+        q.type = e.target.value;
+        if (q.type === 'text') q.multiple = false;
+        drawQs();
+      };
       $('[data-k="required"]', row).onchange = e => { q.required = e.target.checked; };
       $('[data-k="multiple"]', row).onchange = e => { q.multiple = e.target.checked; };
-      $('[data-rm]', row).onclick = () => { questions.splice(Number(row.dataset.i), 1); drawQs(); };
+      $('[data-rm]', row).onclick = () => {
+        if (started && !confirm(`${started} ${started > 1 ? 'people have' : 'person has'} already started answering. Removing this question hides their answers to it. Continue?`)) return;
+        questions.splice(Number(row.dataset.i), 1);
+        drawQs();
+      };
       $('[data-up]', row).onclick = () => {
         const i = Number(row.dataset.i);
         [questions[i - 1], questions[i]] = [questions[i], questions[i - 1]];
@@ -794,18 +876,19 @@ function adminForm(call) {
       is_open: f.open.checked,
     };
     if (call) row.id = call.id;
+    if (new Date(row.reveal_at) <= Date.now() && !confirm('The unlock time is in the past: everything uploaded will be visible to everyone immediately. Continue?')) return;
     msg.textContent = 'Saving…';
     try {
       await api.saveCall(row);
       state.calls = await api.listCalls();
       location.hash = `#/call/${row.number}`;
-    } catch (err) { msg.textContent = err.message; }
+    } catch (err) { msg.textContent = friendly(err); }
   };
   const del = $('#del');
   if (del) del.onclick = async () => {
     if (!confirm(`Delete ${callName(call)} and everything uploaded to it? This cannot be undone.`)) return;
     try { await api.deleteCall(call.id); state.calls = await api.listCalls(); location.hash = '#/admin'; }
-    catch (err) { msg.textContent = err.message; }
+    catch (err) { msg.textContent = friendly(err); }
   };
 }
 
@@ -814,7 +897,7 @@ function viewAbout() {
   setBar('[I] About');
   app.innerHTML = `
     <section class="about">
-      <p class="label">[About]</p>
+      <h1 class="label">[About]</h1>
       <p class="lead">${esc(SITE_NAME)} is the archive of our monthly calls.</p>
       <p>Before each call the admin opens uploads. Everyone adds a selfie, answers the questions of the month, and shares photos, words and links.</p>
       <p>Nobody, admin included, can see what the others uploaded until the unlock time. Then everything opens at once and stays here for good.</p>
@@ -845,7 +928,7 @@ async function route() {
     viewNotFound();
   } catch (e) {
     console.error(e);
-    app.innerHTML = `<p class="msg center pad">Something went wrong: ${esc(e.message)}<br><a href="#/">Back to index</a></p>`;
+    app.innerHTML = `<p class="msg center pad" role="alert">${esc(friendly(e))}<br><a href="#/">Back to index</a></p>`;
   }
 }
 
@@ -863,7 +946,7 @@ async function boot() {
         state.mine = new Map(mine.map(r => [r.call_id, r.submitted_at]));
       }
     } catch (e) {
-      app.innerHTML = `<p class="msg center pad">Could not reach the archive: ${esc(e.message)}</p>`;
+      app.innerHTML = `<p class="msg center pad" role="alert">Could not reach the archive. ${esc(friendly(e))}</p>`;
       return;
     }
   }
@@ -876,14 +959,21 @@ async function boot() {
 function openModal(inner) {
   const el = document.createElement('div');
   el.className = 'modal';
-  el.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true">${inner}</div>`;
+  el.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">${inner}</div>`;
   const onKey = e => { if (e.key === 'Escape') el.close(); };
-  el.close = () => { el.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('hashchange', el.close); };
+  let release = () => {};
+  el.close = () => {
+    el.remove();
+    document.removeEventListener('keydown', onKey);
+    window.removeEventListener('hashchange', el.close);
+    release();
+  };
   el.set = html => { $('.modal-card', el).innerHTML = html; $('.btn', el)?.focus(); };
   el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-close]')) el.close(); });
   document.addEventListener('keydown', onKey);
   window.addEventListener('hashchange', el.close);
   document.body.append(el);
+  release = trapFocus(el);
   $('.btn', el)?.focus();
   return el;
 }
@@ -900,7 +990,7 @@ function promptPending() {
   if (!onceThisSession(`mabusy:prompt:${call.id}`)) return;
   openModal(`
     <p class="label alert">[Upload open]</p>
-    <p class="lead">${callName(call)}${call.title ? ` · ${esc(call.title)}` : ''} is open.</p>
+    <p class="lead" id="modal-title">${callName(call)}${call.title ? ` · ${esc(call.title)}` : ''} is open.</p>
     <p>${isDraft(call)
       ? 'Your contribution is still a draft. Finish it and press Submit.'
       : "You haven't uploaded anything yet. Add your selfie and answers."}</p>
@@ -919,7 +1009,7 @@ function promptShow() {
   if (!onceThisSession(`mabusy:show:${call.id}`)) return false;
   const m = openModal(`
     <p class="label">[${callName(call)} unlocked]</p>
-    <p class="lead">Are you all connected to see how the last period went?</p>
+    <p class="lead" id="modal-title">Are you all connected to see how the last period went?</p>
     <div class="row">
       <button type="button" class="btn" data-yes>Yes, start the show</button>
       <button type="button" class="link" data-no>No</button>
@@ -929,7 +1019,7 @@ function promptShow() {
     if (e.target.closest('[data-no]')) {
       m.set(`
         <p class="label">[${callName(call)} unlocked]</p>
-        <p class="lead">Do you want to watch it on your own, since you're not in the call?</p>
+        <p class="lead" id="modal-title">Do you want to watch it on your own, since you're not in the call?</p>
         <div class="row">
           <button type="button" class="btn" data-alone>Yes, watch alone</button>
           <button type="button" class="link" data-browse>No, just browse</button>
@@ -971,23 +1061,26 @@ async function startShow(call, together) {
 
   const el = document.createElement('div');
   el.className = 'show';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-label', `${callName(call)} show`);
   el.innerHTML = `
     <div class="show-top">
       <span>${callName(call)}${call.title ? ` · ${esc(call.title)}` : ''}</span>
-      <span class="muted" id="show-pos"></span>
+      <span class="muted" id="show-pos" aria-live="polite"></span>
       <button type="button" class="link" data-x>Close</button>
     </div>
     <div class="track" id="track"></div>
     <div class="show-foot">
-      <ul class="who">${people.map((p, i) => `<li><button type="button" class="link" data-p="${i}">${esc(p.name)}</button></li>`).join('')}</ul>
-      <span class="muted small hint">${together ? 'Together: clicks move the show for everyone' : 'On your own'} · scroll →</span>
+      <ul class="who" aria-label="People">${people.map((p, i) => `<li><button type="button" class="link" data-p="${i}">${esc(p.name)}</button></li>`).join('')}</ul>
+      <span class="muted small hint">${together ? 'Together: clicks move the show for everyone' : 'On your own'} · <span class="desk">scroll or ← →</span><span class="mob">swipe</span></span>
     </div>`;
   document.body.append(el);
   document.body.classList.add('noscroll');
   const track = $('#track', el);
 
   // Explicit aspect ratio so panels have their final width before the image loads.
-  const showImg = it => `<img data-src="${esc(it.path)}" alt="" style="aspect-ratio:${it.w || 4}/${it.h || 3}">`;
+  const showImg = it => `<img data-src="${esc(it.path)}" alt="${esc(altOf(it))}" style="aspect-ratio:${it.w || 4}/${it.h || 3}">`;
 
   function panels(p, i) {
     const selfie = p.items.find(x => x.qid === 'selfie');
@@ -1015,7 +1108,8 @@ async function startShow(call, together) {
     });
     html += `<section class="panel end">${i < people.length - 1
       ? '<button type="button" class="next-btn" data-next>Next person →</button>'
-      : '<p class="say">That\'s everyone.</p><button type="button" class="btn" data-x>Back to the archive</button>'}</section>`;
+      : '<p class="say">That\'s everyone.</p><button type="button" class="btn" data-x>Back to the archive</button>'}
+      ${i ? '<button type="button" class="link" data-prev>← Previous person</button>' : ''}</section>`;
     return html;
   }
 
@@ -1028,7 +1122,7 @@ async function startShow(call, together) {
       </section>`;
     const r = $('#roll', el);
     const names = people.map(p => p.name);
-    for (let k = 0; k < 16; k++) { r.textContent = names[(i + k) % names.length]; await sleep(50 + k * 10); }
+    if (!reducedMotion()) for (let k = 0; k < 16; k++) { r.textContent = names[(i + k) % names.length]; await sleep(50 + k * 10); }
     r.textContent = people[i].name;
     r.classList.add('landed');
     await sleep(800);
@@ -1046,6 +1140,7 @@ async function startShow(call, together) {
     await roll(i);
     track.innerHTML = panels(people[i], i);
     track.scrollLeft = 0;
+    if (el.contains(document.activeElement) && document.activeElement.matches('[data-next], [data-prev]')) $('[data-x]', el).focus();
     hydrate(track);
     busy = false;
     if (queued !== null) { const q = queued; queued = null; if (q !== cur) go(q, false); }
@@ -1062,8 +1157,9 @@ async function startShow(call, together) {
     const x = track.scrollLeft, left = p => p.offsetLeft - ps[0].offsetLeft;
     const atEnd = x + track.clientWidth >= track.scrollWidth - 4;
     const target = dir > 0 ? (atEnd ? null : ps.find(p => left(p) > x + 20)) : [...ps].reverse().find(p => left(p) < x - 20);
-    if (target) track.scrollTo({ left: left(target), behavior: 'smooth' });
+    if (target) track.scrollTo({ left: left(target), behavior: reducedMotion() ? 'auto' : 'smooth' });
     else if (dir > 0 && !busy) go(cur + 1);
+    else if (dir < 0 && !busy && x <= 0) go(cur - 1);
   }
   const onKey = e => {
     if (e.key === 'Escape') close();
@@ -1072,6 +1168,7 @@ async function startShow(call, together) {
   };
   function close() {
     el.remove();
+    release();
     document.body.classList.remove('noscroll');
     document.removeEventListener('keydown', onKey);
     if (chan) api.sb.removeChannel(chan);
@@ -1083,8 +1180,11 @@ async function startShow(call, together) {
   el.addEventListener('click', e => {
     if (e.target.closest('[data-x]')) close();
     else if (e.target.closest('[data-next]')) go(cur + 1);
+    else if (e.target.closest('[data-prev]')) go(cur - 1);
     else if (e.target.closest('[data-p]')) go(Number(e.target.closest('[data-p]').dataset.p));
   });
+  const release = trapFocus(el);
+  $('[data-x]', el).focus();
   go(0, false);
 }
 
