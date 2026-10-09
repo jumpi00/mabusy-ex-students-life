@@ -267,7 +267,7 @@ select.line { width: auto; }
 :root { --foot-h: 44px; --bar-h: 56px; }
 .footer {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; height: var(--foot-h);
-  display: flex; align-items: center; padding: 0 var(--gutter);
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 var(--gutter);
   background: var(--bg); color: var(--muted); font-size: 13px;
 }
 .footer::before { content: ""; position: absolute; top: 0; left: var(--gutter); right: var(--gutter); border-top: 1px solid var(--soft); }
@@ -280,7 +280,7 @@ body { padding-bottom: calc(var(--foot-h) + var(--bar-h)); }
 @media (max-width: 760px) {
   :root { --foot-h: calc(76px + env(safe-area-inset-bottom)); --bar-h: 64px; }
   .footer {
-    justify-content: center; text-align: center; font-size: 15px;
+    font-size: 15px;
     padding: 20px var(--gutter) calc(20px + env(safe-area-inset-bottom));
   }
   .footer a { display: inline-block; padding: 12px 0; }

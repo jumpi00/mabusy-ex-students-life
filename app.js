@@ -1,5 +1,5 @@
-import * as api from './api.js?v=202610091215';
-import { SITE_NAME } from './config.js?v=202610091215';
+import * as api from './api.js?v=202610091216';
+import { SITE_NAME } from './config.js?v=202610091216';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
