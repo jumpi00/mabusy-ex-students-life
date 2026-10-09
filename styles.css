@@ -18,7 +18,9 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
-body { background: var(--bg); font-size: 14px; line-height: 1.35; min-height: 100vh; padding-bottom: 80px; }
+body { background: var(--bg); font-size: 14px; line-height: 1.35; min-height: 100vh; min-height: 100dvh; padding-bottom: 64px; display: flex; flex-direction: column; }
+/* Footer sits at the bottom of the viewport on short pages, after the content on long ones */
+#app { flex: 1 0 auto; padding-bottom: 90px; }
 body.noscroll { overflow: hidden; }
 a { color: inherit; text-decoration: none; }
 a:hover { opacity: .55; }
@@ -263,13 +265,14 @@ select.line { width: auto; }
 
 /* Footer */
 .footer {
-  margin: 90px var(--gutter) 0; padding: 16px 0 24px; border-top: 1px solid var(--soft);
+  margin: 0 var(--gutter); padding: 16px 0; border-top: 1px solid var(--soft);
   color: var(--muted); font-size: 13px;
 }
 .footer a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .footer a:hover { color: var(--fg); opacity: 1; }
 @media (max-width: 760px) {
-  .footer { text-align: center; font-size: 15px; margin-top: 60px; }
+  .footer { text-align: center; font-size: 15px; padding: 6px 0; }
+  #app { padding-bottom: 60px; }
   .footer a { display: inline-block; padding: 12px 0; }
 }
 

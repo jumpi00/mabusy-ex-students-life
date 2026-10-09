@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { SUPABASE_URL, SUPABASE_KEY } from './config.js?v=202610091211';
-import { processImage, extFor } from './image.js?v=202610091211';
+import { SUPABASE_URL, SUPABASE_KEY } from './config.js?v=202610091212';
+import { processImage, extFor } from './image.js?v=202610091212';
 
 // Implicit flow: the magic link works even when opened on another device/browser.
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
