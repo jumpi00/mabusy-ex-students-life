@@ -272,6 +272,7 @@ select.line { width: auto; }
 }
 .footer::before { content: ""; position: absolute; top: 0; left: var(--gutter); right: var(--gutter); border-top: 1px solid var(--soft); }
 .footer a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.footer > a { flex: none; white-space: nowrap; }
 .footer a:hover { color: var(--fg); opacity: 1; }
 .bar { bottom: var(--foot-h); }
 body { padding-bottom: calc(var(--foot-h) + var(--bar-h)); }
