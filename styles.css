@@ -98,6 +98,11 @@ img.in { opacity: 1 !important; }
 .ready li.on { color: var(--fg); }
 .ready .dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid currentColor; }
 .ready li.on .dot { background: currentColor; }
+.ready li.half { color: var(--fg); }
+.ready li.half .dot { background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
+.legend { margin: 18px 0 0 !important; }
+.req { font-size: 14px; margin: 14px 0 0; }
+.req .todo { color: var(--danger); }
 
 /* Forms */
 .login, .about { padding-top: 60px; max-width: 560px; }

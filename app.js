@@ -322,21 +322,28 @@ async function viewCall(number) {
 }
 
 async function renderLocked(call, body) {
-  const progress = await api.callProgress(call.id);
-  const ready = progress.filter(p => p.ready).length;
   body.innerHTML = `
     <section class="locked">
       <p class="label">[Unlocks in]</p>
       <p class="clock" data-countdown="${call.reveal_at}">${countdown(new Date(call.reveal_at) - Date.now())}</p>
       <p class="small">${esc(fmtDate(call.reveal_at))} <span class="muted">(${esc(TZ)})</span></p>
-      <p class="label">[Ready ${ready}/${progress.length}]</p>
-      <ul class="ready">${progress.map(p => `
-        <li class="${p.ready ? 'on' : ''}"><span class="dot"></span>${esc(p.name)}</li>`).join('')}
-      </ul>
+      <div id="progress"></div>
     </section>
     <section id="mine"></section>`;
+  // Ready = selfie + at least one photo; started = something uploaded.
+  async function drawProgress() {
+    const progress = await api.callProgress(call.id);
+    const ready = progress.filter(p => p.ready).length;
+    $('#progress').innerHTML = `
+      <p class="label">[Ready ${ready}/${progress.length}]</p>
+      <ul class="ready">${progress.map(p => `
+        <li class="${p.ready ? 'on' : p.has_selfie || p.photos ? 'half' : ''}"><span class="dot"></span>${esc(p.name)}</li>`).join('')}
+      </ul>
+      <p class="small muted legend">● selfie + photo uploaded · ◐ started</p>`;
+  }
+  await drawProgress();
   const mine = $('#mine');
-  if (isAccepting(call)) return renderForm(call, mine);
+  if (isAccepting(call)) return renderForm(call, mine, () => drawProgress().catch(() => {}));
   mine.innerHTML = `<p class="muted center">Uploads are closed for this call.</p>`;
 }
 
@@ -351,7 +358,7 @@ async function renderUnlocked(call, body) {
   body.innerHTML = `
     ${d.selfie.length ? `<p class="label sec">[Selfie]</p>
       <div class="grid">${d.selfie.map((it, i) => figure(it, `${g}s`, i)).join('')}</div>` : ''}
-    ${d.photo.length ? `<p class="label sec">[Photo]</p>
+    ${d.photo.length ? `<p class="label sec">[Photo]${call.photo_prompt ? ` ${esc(call.photo_prompt)}` : ''}</p>
       <div class="grid">${d.photo.map((it, i) => figure(it, `${g}p`, i)).join('')}</div>` : ''}
     ${questions.filter(x => x.items.length).map(({ q, qi, items }) => `
       <p class="label sec">[Q${qi + 1}] ${esc(q.text)}</p>
@@ -383,7 +390,7 @@ const linkCard = it => `
   </figure>`;
 
 // ── Contribution form ──────────────────────────────────────────────────────
-async function renderForm(call, root) {
+async function renderForm(call, root, onProgress = () => {}) {
   const uid = state.session.user.id;
   const [subs, photos] = await Promise.all([api.listSubmissions(call.id), api.listPhotos(call.id)]);
   const mine = subs.find(s => s.user_id === uid);
@@ -399,13 +406,21 @@ async function renderForm(call, root) {
     <form class="contrib" id="contrib" autocomplete="off">
       <p class="label">[Your contribution]</p>
       <p class="small muted">Only you can see this until the unlock. Changes save automatically.</p>
+      <p class="req" id="req"></p>
 
       <div class="field">
-        <p class="label">[Selfie]</p>
+        <p class="label">[Selfie] <span class="muted">required</span></p>
         <div class="selfie-row">
           <div class="selfie-box" id="selfie-box"></div>
           <label class="btn">${draft.selfie ? 'Replace' : 'Upload'} selfie<input type="file" accept="image/*" id="selfie-in" hidden></label>
         </div>
+      </div>
+
+      <div class="field">
+        <p class="label">[Photo] <span class="muted">at least 1 required · <span id="ph-count"></span></span></p>
+        ${call.photo_prompt ? `<p class="q">${esc(call.photo_prompt)}</p>` : ''}
+        <div class="grid edit" id="ph-grid"></div>
+        <label class="btn" id="ph-add">Add photos<input type="file" accept="image/*" multiple id="ph-in" hidden></label>
       </div>
 
       ${(call.questions || []).map((q, qi) => `
@@ -414,12 +429,6 @@ async function renderForm(call, root) {
           <label class="q" for="a-${esc(q.id)}">${esc(q.text)}</label>
           <textarea id="a-${esc(q.id)}" data-q="${esc(q.id)}" rows="3" class="area">${esc(draft.answers[q.id] || '')}</textarea>
         </div>`).join('')}
-
-      <div class="field">
-        <p class="label">[Photo] <span class="muted" id="ph-count"></span></p>
-        <div class="grid edit" id="ph-grid"></div>
-        <label class="btn" id="ph-add">Add photos<input type="file" accept="image/*" multiple id="ph-in" hidden></label>
-      </div>
 
       <div class="field">
         <p class="label">[Text]</p>
@@ -457,6 +466,14 @@ async function renderForm(call, root) {
   }
   const schedule = () => { status('Editing…'); clearTimeout(timer); timer = setTimeout(() => persist().catch(() => {}), 1000); };
 
+  function drawReq(refresh = true) {
+    const s = !!draft.selfie, p = myPhotos.length > 0;
+    $('#req').innerHTML = s && p
+      ? '● Ready: selfie and photo are in. Answers and the rest are a bonus.'
+      : `To be ready: <span class="${s ? '' : 'todo'}">${s ? '✓' : '○'} selfie</span> · <span class="${p ? '' : 'todo'}">${p ? '✓' : '○'} at least one photo</span>`;
+    if (refresh) onProgress();
+  }
+
   // Selfie
   function drawSelfie() {
     const box = $('#selfie-box');
@@ -476,6 +493,7 @@ async function renderForm(call, root) {
       if (old) api.removeFiles([old.path, old.thumb]);
       e.target.parentElement.firstChild.textContent = 'Replace selfie';
       drawSelfie();
+      drawReq();
     } catch (err) { status(`Selfie not saved: ${err.message}`); }
   };
 
@@ -522,7 +540,7 @@ async function renderForm(call, root) {
       b.onclick = async () => {
         const p = myPhotos[Number(b.dataset.del)];
         if (!confirm('Remove this photo?')) return;
-        try { await api.deletePhoto(p); myPhotos = myPhotos.filter(x => x !== p); drawPhotos(); }
+        try { await api.deletePhoto(p); myPhotos = myPhotos.filter(x => x !== p); drawPhotos(); drawReq(); }
         catch (e) { status(`Not removed: ${e.message}`); }
       };
     }
@@ -544,7 +562,9 @@ async function renderForm(call, root) {
       drawPhotos(--left);
     }
     status(`Saved ${fmtTime(new Date())}`);
+    drawReq();
   };
+  drawReq(false);
 
   $('#contrib').onsubmit = e => e.preventDefault();
 }
@@ -623,6 +643,11 @@ function adminForm(call) {
         </div>
       </div>
       <div class="field">
+        <p class="label">[Photo prompt]</p>
+        <label>Theme for this month's photo (optional)
+          <input name="photo_prompt" class="line" placeholder="e.g. The view from your window right now" value="${esc(call?.photo_prompt ?? '')}"></label>
+      </div>
+      <div class="field">
         <p class="label">[Unlock]</p>
         <label>Everything becomes visible at
           <input type="datetime-local" name="reveal" required class="line" value="${toLocalInput(call?.reveal_at ?? defaultReveal)}"></label>
@@ -675,6 +700,8 @@ function adminForm(call) {
       reveal_at: fromLocalInput(f.reveal.value),
       is_open: f.open.checked,
     };
+    const prompt = f.photo_prompt.value.trim();
+    if (prompt || (call && 'photo_prompt' in call)) row.photo_prompt = prompt;
     if (call) row.id = call.id;
     msg.textContent = 'Saving…';
     try {
