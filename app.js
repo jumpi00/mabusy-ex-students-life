@@ -67,7 +67,7 @@ setInterval(() => {
   for (const el of $$('[data-countdown]')) {
     const left = new Date(el.dataset.countdown) - Date.now();
     el.textContent = countdown(left);
-    if (left <= 0 && !el.dataset.done) { el.dataset.done = '1'; setTimeout(route, 1200); }
+    if (left <= 0 && !el.dataset.done) { el.dataset.done = '1'; setTimeout(async () => { await route(); promptShow(); }, 1200); }
   }
 }, 1000);
 
@@ -372,6 +372,7 @@ async function renderUnlocked(call, body) {
   const people = [...new Set([...photos, ...d.text, ...d.links].map(x => x.name))];
 
   body.innerHTML = `
+    ${people.length ? '<p class="center"><button type="button" class="btn" id="play">▶ Play the show</button></p>' : ''}
     ${(call.questions || []).map((q, qi) => {
       const type = qType(q);
       let inner = '';
@@ -393,6 +394,18 @@ async function renderUnlocked(call, body) {
       <dt>Participants</dt><dd>${esc(people.join(', ') || '—')}</dd>
       <dt>Photos</dt><dd>${photos.length}</dd>
     </dl>`;
+  const play = $('#play');
+  if (play) play.onclick = () => openModal(`
+    <p class="label">[Play the show]</p>
+    <p class="lead">Are you all connected right now?</p>
+    <p class="small muted">Together, whoever clicks moves the show for everyone watching.</p>
+    <div class="row">
+      <button type="button" class="btn" data-close data-together>Yes, together</button>
+      <button type="button" class="link" data-close data-solo>No, on my own</button>
+    </div>`).addEventListener('click', e => {
+      if (e.target.closest('[data-together]')) startShow(call, true);
+      if (e.target.closest('[data-solo]')) startShow(call, false);
+    });
   hydrate();
 }
 
@@ -856,37 +869,223 @@ async function boot() {
   }
   if (!state.session && hashErr) return viewLogin(hashErr);
   await route();
-  if (state.me) promptPending();
+  if (state.me && !promptShow()) promptPending();
 }
+
+// ── Modals ─────────────────────────────────────────────────────────────────
+function openModal(inner) {
+  const el = document.createElement('div');
+  el.className = 'modal';
+  el.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true">${inner}</div>`;
+  const onKey = e => { if (e.key === 'Escape') el.close(); };
+  el.close = () => { el.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('hashchange', el.close); };
+  el.set = html => { $('.modal-card', el).innerHTML = html; $('.btn', el)?.focus(); };
+  el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-close]')) el.close(); });
+  document.addEventListener('keydown', onKey);
+  window.addEventListener('hashchange', el.close);
+  document.body.append(el);
+  $('.btn', el)?.focus();
+  return el;
+}
+
+const onceThisSession = key => {
+  try { if (sessionStorage.getItem(key)) return false; sessionStorage.setItem(key, '1'); } catch {}
+  return true;
+};
 
 // Pop-up reminder when a call is open and I haven't submitted yet (once per session per call).
 function promptPending() {
   const call = pendingCalls()[0];
-  if (!call || location.hash === `#/call/${call.number}`) return;
-  const key = `mabusy:prompt:${call.id}`;
-  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch {}
+  if (!call || $('.modal, .show') || location.hash === `#/call/${call.number}`) return;
+  if (!onceThisSession(`mabusy:prompt:${call.id}`)) return;
+  openModal(`
+    <p class="label alert">[Upload open]</p>
+    <p class="lead">${callName(call)}${call.title ? ` · ${esc(call.title)}` : ''} is open.</p>
+    <p>${isDraft(call)
+      ? 'Your contribution is still a draft. Finish it and press Submit.'
+      : "You haven't uploaded anything yet. Add your selfie and answers."}</p>
+    <p class="small alert">Before ${esc(fmtDate(call.reveal_at))} · <span data-countdown="${call.reveal_at}">${countdown(new Date(call.reveal_at) - Date.now())}</span> left</p>
+    <div class="row">
+      <a class="btn" href="#/call/${call.number}">Add my contribution</a>
+      <button type="button" class="link" data-close>Later</button>
+    </div>`);
+}
+
+// On the day of the call (first 24h after the unlock): offer the show.
+const SHOW_WINDOW = 24 * 3600e3;
+function promptShow() {
+  const call = state.calls.find(c => isRevealed(c) && Date.now() - new Date(c.reveal_at) < SHOW_WINDOW);
+  if (!call || $('.modal, .show')) return false;
+  if (!onceThisSession(`mabusy:show:${call.id}`)) return false;
+  const m = openModal(`
+    <p class="label">[${callName(call)} unlocked]</p>
+    <p class="lead">Are you all connected to see how the last period went?</p>
+    <div class="row">
+      <button type="button" class="btn" data-yes>Yes, start the show</button>
+      <button type="button" class="link" data-no>No</button>
+    </div>`);
+  m.addEventListener('click', e => {
+    if (e.target.closest('[data-yes]')) { m.close(); startShow(call, true); }
+    if (e.target.closest('[data-no]')) {
+      m.set(`
+        <p class="label">[${callName(call)} unlocked]</p>
+        <p class="lead">Do you want to watch it on your own, since you're not in the call?</p>
+        <div class="row">
+          <button type="button" class="btn" data-alone>Yes, watch alone</button>
+          <button type="button" class="link" data-browse>No, just browse</button>
+        </div>`);
+    }
+    if (e.target.closest('[data-alone]')) { m.close(); startShow(call, false); }
+    if (e.target.closest('[data-browse]')) { m.close(); location.hash = `#/call/${call.number}`; }
+  });
+  return true;
+}
+
+// ── Show: one person at a time, in a random order that is the same for everyone ──
+function seededShuffle(list, key) {
+  let h = 1779033703;
+  for (const ch of key) h = Math.imul(h ^ ch.charCodeAt(0), 3432918353);
+  const rand = () => { // mulberry32
+    h = (h + 0x6D2B79F5) | 0;
+    let t = Math.imul(h ^ (h >>> 15), 1 | h);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function startShow(call, together) {
+  const d = await loadArchive(call.id);
+  const all = [...d.selfie, ...d.photo, ...d.text, ...d.links];
+  const has = new Set(all.map(x => x.email.toLowerCase()));
+  const people = seededShuffle(state.members.filter(m => has.has(m.email.toLowerCase())), `${call.id}|${call.reveal_at}`)
+    .map(m => ({ name: m.name, items: all.filter(x => x.email.toLowerCase() === m.email.toLowerCase()) }));
+  if (!people.length) { alert('Nobody uploaded anything for this call.'); return; }
+  const qs = call.questions || [];
+
   const el = document.createElement('div');
-  el.className = 'modal';
+  el.className = 'show';
   el.innerHTML = `
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <p class="label alert">[Upload open]</p>
-      <p class="lead" id="modal-title">${callName(call)}${call.title ? ` · ${esc(call.title)}` : ''} is open.</p>
-      <p>${isDraft(call)
-        ? "Your contribution is still a draft. Finish it and press Submit."
-        : "You haven't uploaded anything yet. Add your selfie and answers."}</p>
-      <p class="small alert">Before ${esc(fmtDate(call.reveal_at))} · <span data-countdown="${call.reveal_at}">${countdown(new Date(call.reveal_at) - Date.now())}</span> left</p>
-      <div class="row">
-        <a class="btn" href="#/call/${call.number}">Add my contribution</a>
-        <button type="button" class="link" data-close>Later</button>
-      </div>
+    <div class="show-top">
+      <span>${callName(call)}${call.title ? ` · ${esc(call.title)}` : ''}</span>
+      <span class="muted" id="show-pos"></span>
+      <button type="button" class="link" data-x>Close</button>
+    </div>
+    <div class="track" id="track"></div>
+    <div class="show-foot">
+      <ul class="who">${people.map((p, i) => `<li><button type="button" class="link" data-p="${i}">${esc(p.name)}</button></li>`).join('')}</ul>
+      <span class="muted small hint">${together ? 'Together: clicks move the show for everyone' : 'On your own'} · scroll →</span>
     </div>`;
-  const close = () => { el.remove(); document.removeEventListener('keydown', onKey); window.removeEventListener('hashchange', close); };
-  const onKey = e => { if (e.key === 'Escape') close(); };
-  el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-close]')) close(); });
-  document.addEventListener('keydown', onKey);
-  window.addEventListener('hashchange', close);
   document.body.append(el);
-  $('.btn', el).focus();
+  document.body.classList.add('noscroll');
+  const track = $('#track', el);
+
+  // Explicit aspect ratio so panels have their final width before the image loads.
+  const showImg = it => `<img data-src="${esc(it.path)}" alt="" style="aspect-ratio:${it.w || 4}/${it.h || 3}">`;
+
+  function panels(p, i) {
+    const selfie = p.items.find(x => x.qid === 'selfie');
+    let html = `
+      <section class="panel intro">
+        <div><p class="label">[${i + 1}/${people.length}]</p><h2 class="who-name">${esc(p.name)}</h2></div>
+        ${selfie ? showImg(selfie) : ''}
+      </section>`;
+    qs.forEach((q, qi) => {
+      if (q.id === 'selfie') return;
+      const its = p.items.filter(x => x.qid === q.id);
+      if (!its.length) return;
+      const head = `<p class="label">[Q${qi + 1}] ${esc(q.text)}</p>`;
+      if (qType(q) === 'photo') {
+        its.forEach((it, k) => {
+          html += `<section class="panel ph">${k ? '<p class="label">&nbsp;</p>' : head}
+            ${showImg(it)}<p class="small">${esc(it.text) || '&nbsp;'}</p></section>`;
+        });
+      } else if (qType(q) === 'link') {
+        html += `<section class="panel txt">${head}${its.map(it => `
+          <p class="say"><a href="${esc(safeHref(it.url))}" target="_blank" rel="noopener">${esc(it.label || hostOf(it.url))} ↗</a></p>`).join('')}</section>`;
+      } else {
+        html += `<section class="panel txt">${head}<p class="say">${esc(its[0].body)}</p></section>`;
+      }
+    });
+    html += `<section class="panel end">${i < people.length - 1
+      ? '<button type="button" class="next-btn" data-next>Next person →</button>'
+      : '<p class="say">That\'s everyone.</p><button type="button" class="btn" data-x>Back to the archive</button>'}</section>`;
+    return html;
+  }
+
+  // Name roulette before each person.
+  async function roll(i) {
+    track.innerHTML = `
+      <section class="panel picker">
+        <p class="label">[${i ? 'Next up' : "Who's first?"}]</p>
+        <p class="who-name" id="roll"></p>
+      </section>`;
+    const r = $('#roll', el);
+    const names = people.map(p => p.name);
+    for (let k = 0; k < 16; k++) { r.textContent = names[(i + k) % names.length]; await sleep(50 + k * 10); }
+    r.textContent = people[i].name;
+    r.classList.add('landed');
+    await sleep(800);
+  }
+
+  let cur = -1, busy = false, queued = null, chan = null;
+  async function go(i, broadcast = true) {
+    if (i < 0 || i >= people.length) return;
+    if (busy) { queued = i; return; }
+    busy = true;
+    cur = i;
+    if (broadcast && chan) chan.send({ type: 'broadcast', event: 'go', payload: { i } });
+    $('#show-pos', el).textContent = `${i + 1} / ${people.length}`;
+    for (const b of $$('[data-p]', el)) b.classList.toggle('on', Number(b.dataset.p) === i);
+    await roll(i);
+    track.innerHTML = panels(people[i], i);
+    track.scrollLeft = 0;
+    hydrate(track);
+    busy = false;
+    if (queued !== null) { const q = queued; queued = null; if (q !== cur) go(q, false); }
+  }
+
+  // Together: whoever clicks moves everyone watching (Supabase Realtime broadcast).
+  if (together) {
+    chan = api.sb.channel(`show-${call.id}`, { config: { broadcast: { self: false } } });
+    chan.on('broadcast', { event: 'go' }, ({ payload }) => { if (payload?.i !== cur) go(payload.i, false); }).subscribe();
+  }
+
+  function step(dir) {
+    const ps = $$('.panel', track);
+    const x = track.scrollLeft, left = p => p.offsetLeft - ps[0].offsetLeft;
+    const atEnd = x + track.clientWidth >= track.scrollWidth - 4;
+    const target = dir > 0 ? (atEnd ? null : ps.find(p => left(p) > x + 20)) : [...ps].reverse().find(p => left(p) < x - 20);
+    if (target) track.scrollTo({ left: left(target), behavior: 'smooth' });
+    else if (dir > 0 && !busy) go(cur + 1);
+  }
+  const onKey = e => {
+    if (e.key === 'Escape') close();
+    if (e.key === 'ArrowRight') step(1);
+    if (e.key === 'ArrowLeft') step(-1);
+  };
+  function close() {
+    el.remove();
+    document.body.classList.remove('noscroll');
+    document.removeEventListener('keydown', onKey);
+    if (chan) api.sb.removeChannel(chan);
+  }
+  document.addEventListener('keydown', onKey);
+  track.addEventListener('wheel', e => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { track.scrollLeft += e.deltaY; e.preventDefault(); }
+  }, { passive: false });
+  el.addEventListener('click', e => {
+    if (e.target.closest('[data-x]')) close();
+    else if (e.target.closest('[data-next]')) go(cur + 1);
+    else if (e.target.closest('[data-p]')) go(Number(e.target.closest('[data-p]').dataset.p));
+  });
+  go(0, false);
 }
 
 window.addEventListener('hashchange', route);
