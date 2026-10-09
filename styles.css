@@ -261,6 +261,18 @@ select.line { width: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 
+/* Footer */
+.footer {
+  margin: 90px var(--gutter) 0; padding: 16px 0 24px; border-top: 1px solid var(--soft);
+  color: var(--muted); font-size: 13px;
+}
+.footer a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.footer a:hover { color: var(--fg); opacity: 1; }
+@media (max-width: 760px) {
+  .footer { text-align: center; font-size: 15px; margin-top: 60px; }
+  .footer a { display: inline-block; padding: 12px 0; }
+}
+
 /* Larger controls (desktop) */
 .btn, .field label.btn { font-size: 15px; padding: 12px 22px; }
 .link { font-size: 14px; }
