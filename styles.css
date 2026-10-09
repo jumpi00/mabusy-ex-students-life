@@ -263,16 +263,26 @@ select.line { width: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 
-/* Footer */
+/* Footer: fixed at the very bottom of the viewport, the = bar sits right above it */
+:root { --foot-h: 44px; --bar-h: 56px; }
 .footer {
-  margin: 0 var(--gutter); padding: 16px 0; border-top: 1px solid var(--soft);
-  color: var(--muted); font-size: 13px;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; height: var(--foot-h);
+  display: flex; align-items: center; padding: 0 var(--gutter);
+  background: var(--bg); color: var(--muted); font-size: 13px;
 }
+.footer::before { content: ""; position: absolute; top: 0; left: var(--gutter); right: var(--gutter); border-top: 1px solid var(--soft); }
 .footer a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .footer a:hover { color: var(--fg); opacity: 1; }
+.bar { bottom: var(--foot-h); }
+body { padding-bottom: calc(var(--foot-h) + var(--bar-h)); }
+#app { padding-bottom: 60px; }
+.submit-bar { bottom: calc(var(--foot-h) + var(--bar-h)) !important; }
 @media (max-width: 760px) {
-  .footer { text-align: center; font-size: 15px; padding: 6px 0; }
-  #app { padding-bottom: 60px; }
+  :root { --foot-h: calc(76px + env(safe-area-inset-bottom)); --bar-h: 64px; }
+  .footer {
+    justify-content: center; text-align: center; font-size: 15px;
+    padding: 20px var(--gutter) calc(20px + env(safe-area-inset-bottom));
+  }
   .footer a { display: inline-block; padding: 12px 0; }
 }
 
