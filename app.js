@@ -1,5 +1,7 @@
-import * as api from './api.js?v=202610091441';
-import { SITE_NAME } from './config.js?v=202610091441';
+// ?demo in the URL swaps in a fake in-memory backend (see demo.js).
+const DEMO = new URLSearchParams(location.search).has('demo');
+const api = DEMO ? await import('./demo.js?v=202610091445') : await import('./api.js?v=202610091445');
+import { SITE_NAME } from './config.js?v=202610091445';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -961,7 +963,16 @@ async function route() {
   }
 }
 
+function demoFlag() {
+  if (!DEMO || $('.demo-flag')) return;
+  const el = document.createElement('p');
+  el.className = 'demo-flag';
+  el.innerHTML = 'Demo · fake data, nothing is saved · <a href="./">Exit demo</a>';
+  $('.top').append(el);
+}
+
 async function boot() {
+  demoFlag();
   const query = new URLSearchParams(location.search);
   if (query.get('token_hash')) return viewConfirmLink(query.get('token_hash'), query.get('type') || 'email');
   const hashErr = new URLSearchParams(location.hash.slice(1)).get('error_description');

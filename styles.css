@@ -270,6 +270,11 @@ select.line { width: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 
+/* Demo mode flag */
+.top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.demo-flag { pointer-events: auto; margin: 0; font-size: 13px; color: var(--danger); text-align: right; }
+.demo-flag a { text-decoration: underline; text-underline-offset: 3px; }
+
 /* Footer: fixed at the very bottom of the viewport, the = bar sits right above it */
 :root { --foot-h: 44px; --bar-h: 56px; }
 .footer {
