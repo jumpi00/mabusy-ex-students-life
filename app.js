@@ -12,7 +12,6 @@ const app = $('#app');
 const bar = $('#bar');
 const state = { session: null, me: null, members: [], calls: [] };
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const MAX_PHOTOS = 12;
 
 // ── Formatting ─────────────────────────────────────────────────────────────
 const fmtDate = iso => new Intl.DateTimeFormat('en-GB', {
@@ -128,47 +127,57 @@ app.addEventListener('click', e => {
   if (f && lbGroups[f.dataset.lb]) showLightbox(lbGroups[f.dataset.lb], Number(f.dataset.i));
 });
 
+// ── Questions ──────────────────────────────────────────────────────────────
+// { id, text, type: 'text' | 'photo' | 'link', required, multiple }
+const SELFIE = { id: 'selfie', text: 'Selfie', type: 'photo', required: true, multiple: false };
+const MULTI_MAX = 6;
+const qType = q => q.type || 'text';
+const qMax = q => (q.multiple ? MULTI_MAX : 1);
+const TYPE_LABEL = { text: 'Text', photo: 'Photo', link: 'Link' };
+
 // ── Archive data (only unlocked calls) ─────────────────────────────────────
 async function loadArchive(callId) {
   const unlocked = new Map(state.calls.filter(isRevealed).map(c => [c.id, c]));
   const [subs, photos] = await Promise.all([api.listSubmissions(callId), api.listPhotos(callId)]);
-  const bySort = (a, b) => b.call.number - a.call.number || sortOf(a.email) - sortOf(b.email);
-  const out = { selfie: [], photo: [], answers: [], text: [], links: [] };
+  const out = { selfie: [], photo: [], text: [], links: [] };
 
   for (const s of subs) {
     const call = unlocked.get(s.call_id);
     if (!call) continue;
     const name = nameOf(s.author_email), p = pad(call.number), n = slug(name);
-    const base = { call, email: s.author_email, name };
-    if (s.selfie?.path) out.selfie.push({ ...base, ...s.selfie, caption: `${p}_selfie_${n}` });
     (call.questions || []).forEach((q, qi) => {
-      const text = (s.answers?.[q.id] || '').trim();
-      if (text) out.answers.push({ ...base, qid: q.id, qi, question: q.text, body: text, caption: `${p}_q${qi + 1}_${n}` });
-    });
-    if (s.body?.trim()) out.text.push({ ...base, body: s.body.trim(), caption: `${p}_txt_${n}` });
-    (s.links || []).forEach((l, li) => {
-      if (l.url) out.links.push({ ...base, ...l, caption: `${p}_lnk_${n}${li ? `-${li + 1}` : ''}` });
+      const v = s.answers?.[q.id];
+      const base = { call, email: s.author_email, name, qid: q.id, qi, question: q.text };
+      if (qType(q) === 'text' && typeof v === 'string' && v.trim()) {
+        out.text.push({ ...base, body: v.trim(), caption: `${p}_q${qi + 1}_${n}` });
+      } else if (qType(q) === 'link' && Array.isArray(v)) {
+        v.filter(l => l.url).forEach((l, li) =>
+          out.links.push({ ...base, ...l, caption: `${p}_lnk${qi + 1}_${n}${li ? `-${li + 1}` : ''}` }));
+      }
     });
   }
   const counters = {};
   for (const ph of photos) {
     const call = unlocked.get(ph.call_id);
     if (!call) continue;
-    const name = nameOf(ph.author_email), key = `${call.id}:${ph.author_email}`;
+    const qi = (call.questions || []).findIndex(q => q.id === ph.question_id);
+    const name = nameOf(ph.author_email), n = slug(name), p = pad(call.number);
+    const key = `${call.id}:${ph.question_id}:${ph.author_email}`;
     counters[key] = (counters[key] || 0) + 1;
-    out.photo.push({
-      call, email: ph.author_email, name, path: ph.path, thumb: ph.thumb, w: ph.w, h: ph.h,
-      text: ph.caption, caption: `${pad(call.number)}_ph_${slug(name)}-${counters[key]}`,
+    const isSelfie = ph.question_id === 'selfie';
+    const caption = isSelfie ? `${p}_selfie_${n}` : `${p}_ph${qi + 1}_${n}-${counters[key]}`;
+    (isSelfie ? out.selfie : out.photo).push({
+      call, email: ph.author_email, name, qid: ph.question_id, qi, question: call.questions?.[qi]?.text ?? '',
+      path: ph.path, thumb: ph.thumb, w: ph.w, h: ph.h, text: ph.caption, caption,
     });
   }
-  for (const k in out) out[k].sort((a, b) => bySort(a, b) || (a.qi ?? 0) - (b.qi ?? 0));
+  for (const k in out) {
+    out[k].sort((a, b) => b.call.number - a.call.number || a.qi - b.qi || sortOf(a.email) - sortOf(b.email));
+  }
   return out;
 }
 
-const MATERIALS = [
-  ['selfie', 'Selfie'], ['photo', 'Photo'],
-  ['answers', 'Answers'], ['text', 'Text'], ['links', 'Links'],
-];
+const MATERIALS = [['selfie', 'Selfie'], ['photo', 'Photo'], ['text', 'Text'], ['links', 'Links']];
 
 // ── Views ──────────────────────────────────────────────────────────────────
 function viewLogin(msg = '') {
@@ -255,7 +264,7 @@ async function viewHome() {
   $('#out').onclick = async () => { await api.signOut(); boot(); };
 
   const data = await loadArchive();
-  const groups = [['selfie', 'photo'], ['answers', 'text', 'links']];
+  const groups = [['selfie', 'photo'], ['text', 'links']];
   const label = Object.fromEntries(MATERIALS);
   $('#mat').innerHTML = groups.map(g => `<ul class="big">${g.map(k => `
     <li><a href="#/m/${k}">${label[k]}</a> <span class="count">(${data[k].length})</span></li>`).join('')}</ul>`).join('');
@@ -330,16 +339,15 @@ async function renderLocked(call, body) {
       <div id="progress"></div>
     </section>
     <section id="mine"></section>`;
-  // Ready = selfie + at least one photo; started = something uploaded.
   async function drawProgress() {
     const progress = await api.callProgress(call.id);
     const ready = progress.filter(p => p.ready).length;
     $('#progress').innerHTML = `
-      <p class="label">[Ready ${ready}/${progress.length}]</p>
+      <p class="label">[Submitted ${ready}/${progress.length}]</p>
       <ul class="ready">${progress.map(p => `
-        <li class="${p.ready ? 'on' : p.has_selfie || p.photos ? 'half' : ''}"><span class="dot"></span>${esc(p.name)}</li>`).join('')}
+        <li class="${p.ready ? 'on' : p.started ? 'half' : ''}"><span class="dot"></span>${esc(p.name)}</li>`).join('')}
       </ul>
-      <p class="small muted legend">● selfie + photo uploaded · ◐ started</p>`;
+      <p class="small muted legend">● submitted · ◐ draft · ○ not started</p>`;
   }
   await drawProgress();
   const mine = $('#mine');
@@ -350,30 +358,31 @@ async function renderLocked(call, body) {
 async function renderUnlocked(call, body) {
   const d = await loadArchive(call.id);
   const g = `c${call.id}`;
-  lbGroups[`${g}s`] = d.selfie;
-  lbGroups[`${g}p`] = d.photo;
-  const people = [...new Set([...d.selfie, ...d.answers, ...d.text, ...d.links, ...d.photo].map(x => x.name))];
-  const questions = (call.questions || []).map((q, qi) => ({ q, qi, items: d.answers.filter(a => a.qid === q.id) }));
+  const photos = [...d.selfie, ...d.photo];
+  lbGroups[g] = photos;
+  const people = [...new Set([...photos, ...d.text, ...d.links].map(x => x.name))];
 
   body.innerHTML = `
-    ${d.selfie.length ? `<p class="label sec">[Selfie]</p>
-      <div class="grid">${d.selfie.map((it, i) => figure(it, `${g}s`, i)).join('')}</div>` : ''}
-    ${d.photo.length ? `<p class="label sec">[Photo]${call.photo_prompt ? ` ${esc(call.photo_prompt)}` : ''}</p>
-      <div class="grid">${d.photo.map((it, i) => figure(it, `${g}p`, i)).join('')}</div>` : ''}
-    ${questions.filter(x => x.items.length).map(({ q, qi, items }) => `
-      <p class="label sec">[Q${qi + 1}] ${esc(q.text)}</p>
-      <div class="grid text">${items.map(textCard).join('')}</div>`).join('')}
-    ${d.text.length ? `<p class="label sec">[Text]</p>
-      <div class="grid text">${d.text.map(textCard).join('')}</div>` : ''}
-    ${d.links.length ? `<p class="label sec">[Links]</p>
-      <div class="grid text">${d.links.map(linkCard).join('')}</div>` : ''}
+    ${(call.questions || []).map((q, qi) => {
+      const type = qType(q);
+      let inner = '';
+      if (type === 'photo') {
+        inner = photos.map((it, i) => [it, i]).filter(([it]) => it.qid === q.id)
+          .map(([it, i]) => figure(it, g, i)).join('');
+        inner = inner && `<div class="grid">${inner}</div>`;
+      } else {
+        const list = (type === 'link' ? d.links : d.text).filter(it => it.qid === q.id);
+        inner = list.length ? `<div class="grid text">${list.map(type === 'link' ? linkCard : textCard).join('')}</div>` : '';
+      }
+      return inner && `<p class="label sec">[Q${qi + 1}] ${esc(q.text)}</p>${inner}`;
+    }).join('')}
     ${people.length ? '' : '<p class="muted center">Nobody uploaded anything for this call.</p>'}
     <dl class="meta">
       <dt>No.</dt><dd>${pad(call.number)}</dd>
       <dt>Title</dt><dd>${esc(call.title || '—')}</dd>
       <dt>Unlocked</dt><dd>${esc(fmtDate(call.reveal_at))}</dd>
       <dt>Participants</dt><dd>${esc(people.join(', ') || '—')}</dd>
-      <dt>Photos</dt><dd>${d.photo.length}</dd>
+      <dt>Photos</dt><dd>${photos.length}</dd>
     </dl>`;
   hydrate();
 }
@@ -390,183 +399,229 @@ const linkCard = it => `
   </figure>`;
 
 // ── Contribution form ──────────────────────────────────────────────────────
+// Every change is saved automatically as a draft; Submit marks it as done.
+// Editing after Submit is fine, but removing a required answer turns it back into a draft.
 async function renderForm(call, root, onProgress = () => {}) {
   const uid = state.session.user.id;
+  const qs = call.questions || [];
   const [subs, photos] = await Promise.all([api.listSubmissions(call.id), api.listPhotos(call.id)]);
   const mine = subs.find(s => s.user_id === uid);
-  const draft = {
-    selfie: mine?.selfie ?? null,
-    answers: { ...(mine?.answers || {}) },
-    body: mine?.body ?? '',
-    links: mine?.links?.length ? mine.links.map(l => ({ ...l })) : [{ url: '', label: '' }],
-  };
+  let started = !!mine;
+  let submittedAt = mine?.submitted_at ?? null;
   let myPhotos = photos.filter(p => p.user_id === uid);
+  const photosFor = qid => myPhotos.filter(p => p.question_id === qid);
+
+  const answers = {};
+  for (const q of qs) {
+    const v = mine?.answers?.[q.id];
+    if (qType(q) === 'text') answers[q.id] = typeof v === 'string' ? v : '';
+    if (qType(q) === 'link') {
+      answers[q.id] = Array.isArray(v) && v.length ? v.map(l => ({ url: l.url || '', label: l.label || '' })) : [{ url: '', label: '' }];
+    }
+  }
+
+  const field = (q, i) => {
+    const type = qType(q);
+    let input = '';
+    if (type === 'text') {
+      input = `<textarea data-text="${esc(q.id)}" rows="3" class="area" aria-label="${esc(q.text)}">${esc(answers[q.id])}</textarea>`;
+    } else if (type === 'photo') {
+      input = `
+        <div class="grid edit" data-photos="${esc(q.id)}"></div>
+        <label class="btn" data-add="${esc(q.id)}">Add ${q.multiple ? 'photos' : 'photo'}<input type="file" accept="image/*" ${q.multiple ? 'multiple' : ''} hidden></label>
+        <span class="small muted">${q.multiple ? `up to ${MULTI_MAX}` : 'one photo'}</span>`;
+    } else {
+      input = `<div data-links="${esc(q.id)}"></div>
+        ${q.multiple ? `<button type="button" class="link" data-link-add="${esc(q.id)}">+ Add link</button>` : ''}`;
+    }
+    return `
+      <div class="field" data-field="${esc(q.id)}">
+        <p class="label">[Q${i + 1}] ${q.required ? '<span class="req-tag">Required</span>' : '<span class="muted">Optional</span>'}</p>
+        <p class="q">${esc(q.text)}</p>
+        ${input}
+        <p class="err" data-err></p>
+      </div>`;
+  };
 
   root.innerHTML = `
-    <form class="contrib" id="contrib" autocomplete="off">
+    <form class="contrib" id="contrib" autocomplete="off" novalidate>
       <p class="label">[Your contribution]</p>
-      <p class="small muted">Only you can see this until the unlock. Changes save automatically.</p>
-      <p class="req" id="req"></p>
-
-      <div class="field">
-        <p class="label">[Selfie] <span class="muted">required</span></p>
-        <div class="selfie-row">
-          <div class="selfie-box" id="selfie-box"></div>
-          <label class="btn">${draft.selfie ? 'Replace' : 'Upload'} selfie<input type="file" accept="image/*" id="selfie-in" hidden></label>
-        </div>
+      <p class="small muted">Only you can see this until the unlock. Everything is saved automatically as a draft: press <b>Submit</b> when you're done. You can keep editing until the unlock.</p>
+      ${qs.map(field).join('') || '<p class="muted">No questions for this call.</p>'}
+      <div class="submit-bar">
+        <span class="state" id="state"></span>
+        <button type="submit" class="btn" id="submit">Submit</button>
       </div>
-
-      <div class="field">
-        <p class="label">[Photo] <span class="muted">at least 1 required · <span id="ph-count"></span></span></p>
-        ${call.photo_prompt ? `<p class="q">${esc(call.photo_prompt)}</p>` : ''}
-        <div class="grid edit" id="ph-grid"></div>
-        <label class="btn" id="ph-add">Add photos<input type="file" accept="image/*" multiple id="ph-in" hidden></label>
-      </div>
-
-      ${(call.questions || []).map((q, qi) => `
-        <div class="field">
-          <p class="label">[Q${qi + 1}]</p>
-          <label class="q" for="a-${esc(q.id)}">${esc(q.text)}</label>
-          <textarea id="a-${esc(q.id)}" data-q="${esc(q.id)}" rows="3" class="area">${esc(draft.answers[q.id] || '')}</textarea>
-        </div>`).join('')}
-
-      <div class="field">
-        <p class="label">[Text]</p>
-        <label class="q" for="body">Anything else you want to share</label>
-        <textarea id="body" rows="4" class="area">${esc(draft.body)}</textarea>
-      </div>
-
-      <div class="field">
-        <p class="label">[Links]</p>
-        <div id="links"></div>
-        <button type="button" class="link" id="link-add">+ Add link</button>
-      </div>
-
-      <p class="save"><span id="save-status" class="muted">${mine ? `Saved ${fmtTime(new Date(mine.updated_at))}` : 'Nothing saved yet'}</span></p>
     </form>`;
 
-  const status = t => { $('#save-status').textContent = t; };
+  // ── State & validation
+  const hasAnswer = q => {
+    const t = qType(q);
+    if (t === 'text') return !!answers[q.id].trim();
+    if (t === 'photo') return photosFor(q.id).length > 0;
+    return answers[q.id].some(l => normUrl(l.url));
+  };
+  const missing = () => qs.filter(q => q.required && !hasAnswer(q));
+  function showErrors(list) {
+    for (const q of qs) {
+      const f = $(`[data-field="${CSS.escape(q.id)}"]`, root);
+      const bad = list.includes(q);
+      f.classList.toggle('invalid', bad);
+      $('[data-err]', f).textContent = bad ? 'This answer is required.' : '';
+    }
+  }
+  // Clear an error as soon as the field gets an answer.
+  const recheck = () => showErrors(missing().filter(q => $(`[data-field="${CSS.escape(q.id)}"]`, root).classList.contains('invalid')));
+
+  function drawState(note = '') {
+    const el = $('#state'), btn = $('#submit');
+    el.innerHTML = submittedAt
+      ? `<b>● Submitted</b> <span class="muted">${fmtTime(new Date(submittedAt))} — edits save automatically</span>`
+      : started ? '<b>◐ Draft</b> <span class="muted">— not submitted yet</span>' : '<b>○ Not started</b>';
+    if (note) el.innerHTML += ` <span class="${note.startsWith('!') ? 'errtxt' : 'muted'}">· ${esc(note.replace(/^!/, ''))}</span>`;
+    btn.textContent = submittedAt ? 'Submitted ✓' : 'Submit';
+    btn.classList.toggle('done', !!submittedAt);
+  }
+
+  const payload = () => {
+    const out = {};
+    for (const q of qs) {
+      if (qType(q) === 'text' && answers[q.id].trim()) out[q.id] = answers[q.id];
+      if (qType(q) === 'link') {
+        const links = answers[q.id].map(l => ({ url: normUrl(l.url), label: l.label.trim() })).filter(l => l.url);
+        if (links.length) out[q.id] = links;
+      }
+    }
+    return out;
+  };
+
   let timer;
-  const clean = () => ({
-    selfie: draft.selfie,
-    answers: Object.fromEntries(Object.entries(draft.answers).filter(([, v]) => v.trim())),
-    body: draft.body,
-    links: draft.links.map(l => ({ url: normUrl(l.url), label: l.label.trim() })).filter(l => l.url),
-  });
-  async function persist() {
+  async function persist(fields = {}) {
     clearTimeout(timer);
-    status('Saving…');
+    let reopened = false;
+    if (submittedAt && !('submitted_at' in fields) && missing().length) { fields.submitted_at = null; reopened = true; }
+    const before = `${started}|${!!submittedAt}`;
+    drawState('Saving…');
     try {
-      await api.saveSubmission(call.id, uid, clean());
-      status(`Saved ${fmtTime(new Date())}`);
+      const row = await api.saveSubmission(call.id, uid, { answers: payload(), ...fields });
+      started = true;
+      submittedAt = row.submitted_at;
+      if (reopened) {
+        showErrors(missing());
+        drawState('!A required answer is missing: this is a draft again');
+      } else drawState(`Saved ${fmtTime(new Date())}`);
+      if (before !== `${started}|${!!submittedAt}`) onProgress();
     } catch (e) {
-      status(isAccepting(call) ? `Not saved: ${e.message}` : 'This call is locked now.');
+      drawState(isAccepting(call) ? `!Not saved: ${e.message}` : '!This call is locked now');
       throw e;
     }
   }
-  const schedule = () => { status('Editing…'); clearTimeout(timer); timer = setTimeout(() => persist().catch(() => {}), 1000); };
+  const schedule = () => { drawState('Editing…'); clearTimeout(timer); timer = setTimeout(() => persist().catch(() => {}), 1000); };
 
-  function drawReq(refresh = true) {
-    const s = !!draft.selfie, p = myPhotos.length > 0;
-    $('#req').innerHTML = s && p
-      ? '● Ready: selfie and photo are in. Answers and the rest are a bonus.'
-      : `To be ready: <span class="${s ? '' : 'todo'}">${s ? '✓' : '○'} selfie</span> · <span class="${p ? '' : 'todo'}">${p ? '✓' : '○'} at least one photo</span>`;
-    if (refresh) onProgress();
+  // ── Text
+  for (const ta of $$('[data-text]', root)) {
+    ta.oninput = () => { answers[ta.dataset.text] = ta.value; recheck(); schedule(); };
   }
 
-  // Selfie
-  function drawSelfie() {
-    const box = $('#selfie-box');
-    box.innerHTML = draft.selfie ? `<img data-src="${esc(draft.selfie.thumb)}" alt="Your selfie">` : '<span class="muted">No selfie yet</span>';
-    hydrate(box);
-  }
-  drawSelfie();
-  $('#selfie-in').onchange = async e => {
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    status('Processing selfie…');
-    try {
-      const old = draft.selfie;
-      draft.selfie = await api.uploadSelfie(call.id, uid, file);
-      await persist();
-      if (old) api.removeFiles([old.path, old.thumb]);
-      e.target.parentElement.firstChild.textContent = 'Replace selfie';
-      drawSelfie();
-      drawReq();
-    } catch (err) { status(`Selfie not saved: ${err.message}`); }
-  };
-
-  // Answers + text
-  for (const ta of $$('textarea[data-q]', root)) ta.oninput = () => { draft.answers[ta.dataset.q] = ta.value; schedule(); };
-  $('#body').oninput = e => { draft.body = e.target.value; schedule(); };
-
-  // Links
-  function drawLinks() {
-    $('#links').innerHTML = draft.links.map((l, i) => `
+  // ── Links
+  function drawLinks(qid) {
+    const box = $(`[data-links="${CSS.escape(qid)}"]`, root);
+    const q = qs.find(x => x.id === qid);
+    box.innerHTML = answers[qid].map((l, i) => `
       <div class="link-row">
-        <input class="line" data-l="${i}" data-k="url" placeholder="https://…" value="${esc(l.url)}" inputmode="url">
-        <input class="line" data-l="${i}" data-k="label" placeholder="Label (optional)" value="${esc(l.label)}">
-        <button type="button" class="link" data-rm="${i}" aria-label="Remove link">×</button>
+        <input class="line" data-i="${i}" data-k="url" placeholder="https://…" value="${esc(l.url)}" inputmode="url">
+        <input class="line" data-i="${i}" data-k="label" placeholder="Label (optional)" value="${esc(l.label)}">
+        ${q.multiple && answers[qid].length > 1 ? `<button type="button" class="link" data-rm="${i}" aria-label="Remove link">×</button>` : ''}
       </div>`).join('');
-    for (const inp of $$('#links input')) inp.oninput = () => { draft.links[inp.dataset.l][inp.dataset.k] = inp.value; schedule(); };
-    for (const b of $$('#links [data-rm]')) b.onclick = () => { draft.links.splice(Number(b.dataset.rm), 1); drawLinks(); schedule(); };
+    for (const inp of $$('input', box)) {
+      inp.oninput = () => { answers[qid][inp.dataset.i][inp.dataset.k] = inp.value; recheck(); schedule(); };
+    }
+    for (const b of $$('[data-rm]', box)) {
+      b.onclick = () => { answers[qid].splice(Number(b.dataset.rm), 1); drawLinks(qid); schedule(); };
+    }
+    const add = $(`[data-link-add="${CSS.escape(qid)}"]`, root);
+    if (add) add.hidden = answers[qid].length >= MULTI_MAX;
   }
-  drawLinks();
-  $('#link-add').onclick = () => { draft.links.push({ url: '', label: '' }); drawLinks(); };
+  for (const q of qs.filter(q => qType(q) === 'link')) {
+    drawLinks(q.id);
+    const add = $(`[data-link-add="${CSS.escape(q.id)}"]`, root);
+    if (add) add.onclick = () => { answers[q.id].push({ url: '', label: '' }); drawLinks(q.id); };
+  }
 
-  // Photos
-  function drawPhotos(pending = 0) {
-    $('#ph-count').textContent = `${myPhotos.length}/${MAX_PHOTOS}`;
-    $('#ph-add').hidden = myPhotos.length + pending >= MAX_PHOTOS;
-    $('#ph-grid').innerHTML = myPhotos.map((p, i) => `
+  // ── Photos
+  function drawPhotos(q, pending = 0) {
+    const grid = $(`[data-photos="${CSS.escape(q.id)}"]`, root);
+    const list = photosFor(q.id);
+    const add = $(`[data-add="${CSS.escape(q.id)}"]`, root);
+    add.hidden = list.length + pending >= qMax(q);
+    add.nextElementSibling.hidden = add.hidden;
+    grid.innerHTML = list.map(p => `
       <figure class="item">
         <div class="box"><img data-src="${esc(p.thumb)}" alt="" style="aspect-ratio:${p.w}/${p.h}"></div>
-        <input class="line cap-in" data-id="${p.id}" placeholder="Caption" value="${esc(p.caption)}">
-        <button type="button" class="link" data-del="${i}">Remove</button>
+        <input class="line cap-in" data-id="${p.id}" placeholder="Caption (optional)" value="${esc(p.caption)}">
+        <button type="button" class="link" data-del="${p.id}">Remove</button>
       </figure>`).join('') + Array.from({ length: pending }, () => `
-      <figure class="item"><div class="box pending"><span class="muted">Processing…</span></div></figure>`).join('');
-    hydrate($('#ph-grid'));
-    for (const inp of $$('.cap-in', root)) {
+      <figure class="item"><div class="box pending"><span class="muted small">Processing…</span></div></figure>`).join('');
+    hydrate(grid);
+    for (const inp of $$('.cap-in', grid)) {
       inp.onchange = async () => {
         const p = myPhotos.find(x => x.id === inp.dataset.id);
         p.caption = inp.value.trim();
-        status('Saving…');
-        try { await api.updatePhoto(p.id, { caption: p.caption }); status(`Saved ${fmtTime(new Date())}`); }
-        catch (e) { status(`Not saved: ${e.message}`); }
+        drawState('Saving…');
+        try { await api.updatePhoto(p.id, { caption: p.caption }); drawState(`Saved ${fmtTime(new Date())}`); }
+        catch (e) { drawState(`!Not saved: ${e.message}`); }
       };
     }
-    for (const b of $$('[data-del]', root)) {
+    for (const b of $$('[data-del]', grid)) {
       b.onclick = async () => {
-        const p = myPhotos[Number(b.dataset.del)];
+        const p = myPhotos.find(x => x.id === b.dataset.del);
         if (!confirm('Remove this photo?')) return;
-        try { await api.deletePhoto(p); myPhotos = myPhotos.filter(x => x !== p); drawPhotos(); drawReq(); }
-        catch (e) { status(`Not removed: ${e.message}`); }
+        try {
+          await api.deletePhoto(p);
+          myPhotos = myPhotos.filter(x => x !== p);
+          drawPhotos(q);
+          if (submittedAt && missing().length) await persist();
+          else drawState(`Saved ${fmtTime(new Date())}`);
+        } catch (e) { drawState(`!Not removed: ${e.message}`); }
       };
     }
   }
-  drawPhotos();
-  $('#ph-in').onchange = async e => {
-    const files = [...e.target.files].slice(0, MAX_PHOTOS - myPhotos.length);
-    e.target.value = '';
-    if (!files.length) return;
-    let left = files.length;
-    drawPhotos(left);
-    if (!mine) await persist().catch(() => {}); // make sure you count as "ready"
-    for (const f of files) {
-      status(`Uploading ${files.length - left + 1}/${files.length}…`);
-      try {
-        const pos = (myPhotos.at(-1)?.position ?? -1) + 1;
-        myPhotos.push(await api.uploadPhoto(call.id, uid, f, pos));
-      } catch (err) { alert(`${f.name}: ${err.message}`); }
-      drawPhotos(--left);
-    }
-    status(`Saved ${fmtTime(new Date())}`);
-    drawReq();
-  };
-  drawReq(false);
+  for (const q of qs.filter(q => qType(q) === 'photo')) {
+    drawPhotos(q);
+    $(`[data-add="${CSS.escape(q.id)}"] input`, root).onchange = async e => {
+      const files = [...e.target.files].slice(0, qMax(q) - photosFor(q.id).length);
+      e.target.value = '';
+      if (!files.length) return;
+      let left = files.length;
+      drawPhotos(q, left);
+      for (const f of files) {
+        drawState(`Uploading ${files.length - left + 1}/${files.length}…`);
+        try {
+          const pos = (photosFor(q.id).at(-1)?.position ?? -1) + 1;
+          myPhotos.push(await api.uploadPhoto(call.id, uid, q.id, f, pos));
+        } catch (err) { alert(`${f.name}: ${err.message}`); }
+        drawPhotos(q, --left);
+      }
+      recheck();
+      if (!started) await persist().catch(() => {});
+      else drawState(`Saved ${fmtTime(new Date())}`);
+    };
+  }
 
-  $('#contrib').onsubmit = e => e.preventDefault();
+  // ── Submit
+  $('#contrib').onsubmit = async e => {
+    e.preventDefault();
+    const miss = missing();
+    showErrors(miss);
+    if (miss.length) {
+      drawState(`!${miss.length} required ${miss.length > 1 ? 'answers are' : 'answer is'} missing`);
+      $(`[data-field="${CSS.escape(miss[0].id)}"]`, root).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    await persist({ submitted_at: new Date().toISOString() }).catch(() => {});
+  };
+
+  drawState();
 }
 
 // ── Materials ──────────────────────────────────────────────────────────────
@@ -580,15 +635,16 @@ async function viewMaterial(kind) {
   $('#m-count').textContent = `(${items.length})`;
   if (!items.length) { app.innerHTML = '<p class="muted center pad">Nothing here yet. Things appear once a call unlocks.</p>'; return; }
 
+  const isImg = kind === 'selfie' || kind === 'photo';
   const byCall = new Map();
   items.forEach((it, i) => { if (!byCall.has(it.call)) byCall.set(it.call, []); byCall.get(it.call).push([it, i]); });
   lbGroups[kind] = items;
-  const card = ([it, i]) => (kind === 'selfie' || kind === 'photo') ? figure(it, kind, i)
-    : kind === 'links' ? linkCard(it)
-    : textCard(kind === 'answers' ? { ...it, body: it.body, caption: `${it.caption} · ${it.question}` } : it);
+  const card = ([it, i]) => (isImg ? figure(it, kind, i)
+    : kind === 'links' ? linkCard({ ...it, caption: `${it.caption} · ${it.question}` })
+    : textCard({ ...it, caption: `${it.caption} · ${it.question}` }));
   app.innerHTML = [...byCall].map(([call, list]) => `
     <p class="label sec"><a href="#/call/${call.number}">[${callName(call)}]</a> ${esc(call.title)}</p>
-    <div class="grid ${kind === 'selfie' || kind === 'photo' ? '' : 'text'}">${list.map(card).join('')}</div>`).join('');
+    <div class="grid ${isImg ? '' : 'text'}">${list.map(card).join('')}</div>`).join('');
   hydrate();
 }
 
@@ -619,12 +675,14 @@ function viewAdmin(editNumber) {
 function adminForm(call) {
   const nextNo = Math.max(0, ...state.calls.map(c => c.number)) + 1;
   const defaultReveal = (() => { const d = new Date(); d.setDate(d.getDate() + 7); d.setHours(21, 0, 0, 0); return d.toISOString(); })();
-  let questions = (call?.questions || []).map(q => ({ ...q }));
-  if (!call && !questions.length) {
-    const last = state.calls[0];
-    questions = (last?.questions || []).map(q => ({ ...q }));
-  }
   const qid = () => `q${Math.random().toString(36).slice(2, 8)}`;
+  const norm = q => ({ id: q.id, text: q.text ?? '', type: qType(q), required: !!q.required, multiple: !!q.multiple });
+  let questions = (call?.questions || []).map(norm);
+  if (!call) {
+    // New call: start from the previous call's questions, always with the selfie first.
+    questions = (state.calls[0]?.questions || []).map(norm);
+    if (!questions.some(q => q.id === 'selfie')) questions.unshift({ ...SELFIE });
+  }
 
   app.innerHTML = `
     <form class="admin contrib" id="call-form">
@@ -641,11 +699,6 @@ function adminForm(call) {
           ${state.calls.length ? `<select id="q-copy" class="line"><option value="">Copy questions from…</option>
             ${state.calls.filter(c => c !== call).map(c => `<option value="${c.id}">${callName(c)}</option>`).join('')}</select>` : ''}
         </div>
-      </div>
-      <div class="field">
-        <p class="label">[Photo prompt]</p>
-        <label>Theme for this month's photo (optional)
-          <input name="photo_prompt" class="line" placeholder="e.g. The view from your window right now" value="${esc(call?.photo_prompt ?? '')}"></label>
       </div>
       <div class="field">
         <p class="label">[Unlock]</p>
@@ -667,26 +720,43 @@ function adminForm(call) {
 
   function drawQs() {
     $('#qs').innerHTML = questions.map((q, i) => `
-      <div class="link-row">
-        <span class="muted">Q${i + 1}</span>
-        <input class="line" data-i="${i}" value="${esc(q.text)}" placeholder="Question">
-        <button type="button" class="link" data-up="${i}" aria-label="Move up" ${i ? '' : 'disabled'}>↑</button>
-        <button type="button" class="link" data-rm="${i}" aria-label="Remove">×</button>
+      <div class="q-row" data-i="${i}">
+        <span class="muted qn">Q${i + 1}</span>
+        <input class="line q-text" data-k="text" value="${esc(q.text)}" placeholder="Question">
+        <div class="q-opts">
+          <select class="line" data-k="type" aria-label="Answer type">
+            ${Object.entries(TYPE_LABEL).map(([v, l]) => `<option value="${v}" ${q.type === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <label class="check sm"><input type="checkbox" data-k="required" ${q.required ? 'checked' : ''}> Required</label>
+          <label class="check sm" ${q.type === 'text' ? 'style="visibility:hidden"' : ''}><input type="checkbox" data-k="multiple" ${q.multiple ? 'checked' : ''}> Several</label>
+          <button type="button" class="link" data-up aria-label="Move up" ${i ? '' : 'disabled'}>↑</button>
+          <button type="button" class="link" data-rm aria-label="Remove">×</button>
+        </div>
       </div>`).join('') || '<p class="small muted">No questions yet.</p>';
-    for (const inp of $$('#qs input')) inp.oninput = () => { questions[inp.dataset.i].text = inp.value; };
-    for (const b of $$('#qs [data-rm]')) b.onclick = () => { questions.splice(Number(b.dataset.rm), 1); drawQs(); };
-    for (const b of $$('#qs [data-up]')) b.onclick = () => {
-      const i = Number(b.dataset.up);
-      [questions[i - 1], questions[i]] = [questions[i], questions[i - 1]];
-      drawQs();
-    };
+    for (const row of $$('#qs .q-row')) {
+      const q = questions[row.dataset.i];
+      $('[data-k="text"]', row).oninput = e => { q.text = e.target.value; };
+      $('[data-k="type"]', row).onchange = e => { q.type = e.target.value; if (q.type === 'text') q.multiple = false; drawQs(); };
+      $('[data-k="required"]', row).onchange = e => { q.required = e.target.checked; };
+      $('[data-k="multiple"]', row).onchange = e => { q.multiple = e.target.checked; };
+      $('[data-rm]', row).onclick = () => { questions.splice(Number(row.dataset.i), 1); drawQs(); };
+      $('[data-up]', row).onclick = () => {
+        const i = Number(row.dataset.i);
+        [questions[i - 1], questions[i]] = [questions[i], questions[i - 1]];
+        drawQs();
+      };
+    }
   }
   drawQs();
-  $('#q-add').onclick = () => { questions.push({ id: qid(), text: '' }); drawQs(); $('#qs input:last-of-type')?.focus(); };
+  $('#q-add').onclick = () => {
+    questions.push({ id: qid(), text: '', type: 'text', required: false, multiple: false });
+    drawQs();
+    $$('#qs .q-text').at(-1)?.focus();
+  };
   const copy = $('#q-copy');
   if (copy) copy.onchange = () => {
     const src = state.calls.find(c => String(c.id) === copy.value);
-    if (src) { questions = src.questions.map(q => ({ ...q })); drawQs(); }
+    if (src) { questions = src.questions.map(norm); drawQs(); }
     copy.value = '';
   };
 
@@ -696,12 +766,10 @@ function adminForm(call) {
     const row = {
       number: Number(f.number.value),
       title: f.title.value.trim(),
-      questions: questions.filter(q => q.text.trim()).map(q => ({ id: q.id, text: q.text.trim() })),
+      questions: questions.filter(q => q.text.trim()).map(q => ({ ...q, text: q.text.trim() })),
       reveal_at: fromLocalInput(f.reveal.value),
       is_open: f.open.checked,
     };
-    const prompt = f.photo_prompt.value.trim();
-    if (prompt || (call && 'photo_prompt' in call)) row.photo_prompt = prompt;
     if (call) row.id = call.id;
     msg.textContent = 'Saving…';
     try {

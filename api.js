@@ -59,18 +59,15 @@ async function uploadPair(callId, userId, file) {
   return { path, thumb, w: img.w, h: img.h };
 }
 
-export async function uploadPhoto(callId, userId, file, position) {
+export async function uploadPhoto(callId, userId, questionId, file, position) {
   const media = await uploadPair(callId, userId, file);
   try {
-    return await sb.from('photos').insert({ call_id: callId, ...media, position }).select().single().then(ok);
+    return await sb.from('photos').insert({ call_id: callId, question_id: questionId, ...media, position })
+      .select().single().then(ok);
   } catch (e) {
     await removeFiles([media.path, media.thumb]);
     throw e;
   }
-}
-
-export async function uploadSelfie(callId, userId, file) {
-  return uploadPair(callId, userId, file);
 }
 
 export const updatePhoto = (id, fields) =>
