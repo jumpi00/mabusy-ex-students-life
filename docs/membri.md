@@ -1,4 +1,4 @@
-# Gestire i membri del gruppo
+# Istruzioni: membri e database
 
 Chi può entrare nel sito è deciso dalla tabella `members` su Supabase.
 L'**email è la chiave** di ogni persona: è quella che il sito usa per riconoscerla.
@@ -82,3 +82,50 @@ where email = 'persona@email.com';
 - Quel file è escluso da git (regola `*.local.sql` in `.gitignore`)
   e **non è mai stato pubblicato** su GitHub.
 - Non scrivere email vere in nessun altro file del progetto: il repository è pubblico.
+
+---
+
+# Pulire il database (ripartire da zero)
+
+> ⚠️ **Non si può annullare.** Vengono cancellate tutte le call, le risposte e le foto.
+
+Restano invece:
+
+- i **membri** e chi è admin;
+- gli **account** (chi è già entrato resta loggato);
+- tutte le **impostazioni** (email, SMTP, URL, Realtime).
+
+## 1. Cancellare call, risposte e foto
+
+In **Supabase → SQL Editor**:
+
+```sql
+truncate public.calls, public.submissions, public.photos restart identity;
+```
+
+Svuota le tre tabelle e fa ripartire da 1 la numerazione interna.
+
+## 2. Cancellare i file delle foto
+
+Il comando sopra cancella solo i riferimenti: i file restano nello spazio di
+archiviazione. Supabase non permette di cancellarli via SQL, quindi:
+
+1. **Storage** nel menu a sinistra.
+2. Passa il mouse sul contenitore **media** → clicca **⋯**.
+3. **Empty bucket** → conferma.
+
+> Non scegliere **Delete bucket**: elimina il contenitore stesso e il caricamento
+> delle foto smetterebbe di funzionare.
+
+## Dopo
+
+Ricarica il sito: la home mostra Datasheet (0) e tutti i Materials a (0).
+La prima call creata dall'Admin partirà con il solo **Selfie** come domanda
+predefinita e con il numero 1.
+
+## Cancellare una sola call
+
+Non serve l'SQL: **Admin → Edit** sulla call → **Delete call** (in fondo, in rosso).
+Si cancellano anche le risposte collegate. I file delle foto di quella call restano
+nello storage; se vuoi recuperare spazio, cancella la cartella con il numero interno
+della call dentro **Storage → media**.
