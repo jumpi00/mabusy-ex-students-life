@@ -61,6 +61,7 @@ function friendly(err) {
   if (/failed to fetch|networkerror|load failed|network request failed|timeout/i.test(m)) return 'Connection problem. Check your internet and try again.';
   if (/calls_number_key|duplicate key/i.test(m)) return 'A call with this number already exists. Choose another number.';
   if (/rate limit|security purposes|too many/i.test(m)) return 'Too many attempts. Wait a minute and try again.';
+  if (/link is invalid|has expired|otp_expired/i.test(m)) return 'This login link has expired or was already used. Request a new one, and use only the most recent email.';
   if (/token has expired|invalid.*token|otp/i.test(m)) return 'This code is wrong or has expired. Request a new link.';
   if (/invalid.*email|unable to validate email/i.test(m)) return 'This email address is not valid.';
   if (/payload too large|exceeded the maximum/i.test(m)) return 'This file is too large.';
@@ -279,6 +280,32 @@ function viewLogin(msg = '') {
     catch (err) { m.textContent = friendly(err); }
   };
   $('#again').onclick = () => { fc.hidden = true; fe.hidden = false; m.textContent = ''; };
+}
+
+function viewConfirmLink(tokenHash, type) {
+  setTitle('Log in');
+  bar.innerHTML = '';
+  app.innerHTML = `
+    <section class="login">
+      <h1 class="label">[Login]</h1>
+      <p class="lead">Tap to finish logging in.</p>
+      <button type="button" class="btn" id="go">Log in</button>
+      <p class="msg" id="login-msg" role="status" aria-live="polite"></p>
+    </section>`;
+  const go = $('#go');
+  go.focus();
+  go.onclick = async () => {
+    go.disabled = true;
+    $('#login-msg').textContent = 'Logging in…';
+    try {
+      await api.verifyLink(tokenHash, type);
+      history.replaceState(null, '', location.pathname + '#/');
+      boot();
+    } catch (err) {
+      history.replaceState(null, '', location.pathname + '#/');
+      viewLogin(friendly(err));
+    }
+  };
 }
 
 function viewNotMember() {
@@ -933,6 +960,8 @@ async function route() {
 }
 
 async function boot() {
+  const query = new URLSearchParams(location.search);
+  if (query.get('token_hash')) return viewConfirmLink(query.get('token_hash'), query.get('type') || 'email');
   const hashErr = new URLSearchParams(location.hash.slice(1)).get('error_description');
   state.session = await api.getSession();
   if (/access_token|error_description/.test(location.hash)) history.replaceState(null, '', location.pathname + '#/');
@@ -950,7 +979,7 @@ async function boot() {
       return;
     }
   }
-  if (!state.session && hashErr) return viewLogin(hashErr);
+  if (!state.session && hashErr) return viewLogin(friendly(hashErr));
   await route();
   if (state.me && !promptShow()) promptPending();
 }

@@ -19,6 +19,10 @@ export function sendLink(email) {
 }
 export const verifyCode = (email, token) =>
   sb.auth.verifyOtp({ email, token, type: 'email' }).then(ok);
+// Link in the email points to the site with a token_hash: we verify it only when the person
+// taps "Log in", so mail scanners that pre-open links can't use it up.
+export const verifyLink = (tokenHash, type = 'email') =>
+  sb.auth.verifyOtp({ token_hash: tokenHash, type }).then(ok);
 export const signOut = () => sb.auth.signOut();
 
 // ── Reads ───────────────────────────────────────────────────────────────────
