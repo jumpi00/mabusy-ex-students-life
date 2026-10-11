@@ -270,6 +270,19 @@ select.line { width: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
 
+/* Material filters */
+.filters { display: grid; gap: 10px; margin: 30px 0 10px; }
+.f-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; }
+.f-row .label { margin: 0; width: 64px; flex: none; }
+.chip { background: none; border: 0; padding: 4px 0; cursor: pointer; font: inherit; font-size: 15px; color: var(--muted); }
+.chip:hover { color: var(--fg); }
+.chip[aria-pressed="true"] { color: var(--fg); text-decoration: underline; text-underline-offset: 4px; }
+@media (max-width: 760px) {
+  .f-row { gap: 0 16px; }
+  .f-row .label { width: 100%; margin-top: 6px; }
+  .chip { font-size: 17px; min-height: 44px; }
+}
+
 /* Demo mode flag */
 .top { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 .demo-flag { pointer-events: auto; margin: 0; font-size: 13px; color: var(--danger); text-align: right; }

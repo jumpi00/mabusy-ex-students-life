@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202610091445') : await import('./api.js?v=202610091445');
-import { SITE_NAME } from './config.js?v=202610091445';
+const api = DEMO ? await import('./demo.js?v=202610111016') : await import('./api.js?v=202610111016');
+import { SITE_NAME } from './config.js?v=202610111016';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -743,27 +743,80 @@ async function renderForm(call, root, onProgress = () => {}) {
 }
 
 // ── Materials ──────────────────────────────────────────────────────────────
-async function viewMaterial(kind) {
+async function viewMaterial(kind, params = new URLSearchParams()) {
   const label = Object.fromEntries(MATERIALS)[kind];
   if (!label) return viewNotFound();
   setTitle(label);
   setBar(`[M] ${label} <span class="count" id="m-count"></span>`);
   app.innerHTML = '<p class="muted center pad">Loading…</p>';
-  const items = (await loadArchive())[kind];
-  $('#m-count').textContent = `(${items.length})`;
-  if (!items.length) { app.innerHTML = '<p class="muted center pad">Nothing here yet. Things appear once a call unlocks.</p>'; return; }
+  const all = (await loadArchive())[kind];
+  if (!all.length) {
+    $('#m-count').textContent = '(0)';
+    app.innerHTML = '<p class="muted center pad">Nothing here yet. Things appear once a call unlocks.</p>';
+    return;
+  }
+
+  // Filters: person and year (of the call's unlock). Kept in the URL, e.g. #/m/photo?name=carla&year=2026
+  const yearOf = it => new Date(it.call.reveal_at).getFullYear();
+  const years = [...new Set(all.map(yearOf))].sort((x, y) => y - x);
+  const names = state.members
+    .filter(m => all.some(it => it.email.toLowerCase() === m.email.toLowerCase()))
+    .map(m => m.name);
+  const filter = {
+    name: names.find(n => slug(n) === params.get('name')) ?? null,
+    year: years.find(y => String(y) === params.get('year')) ?? null,
+  };
+  const chip = (key, value, text) =>
+    `<button type="button" class="chip" data-f="${key}" data-v="${esc(value ?? '')}">${esc(text)}</button>`;
+
+  app.innerHTML = `
+    <h1 class="sr">${label}</h1>
+    <div class="filters" role="group" aria-label="Filters">
+      <div class="f-row" role="group" aria-label="Filter by name">
+        <span class="label">[Name]</span>
+        ${chip('name', null, 'All')}${names.map(n => chip('name', n, n)).join('')}
+      </div>
+      <div class="f-row" role="group" aria-label="Filter by year">
+        <span class="label">[Year]</span>
+        ${chip('year', null, 'All')}${years.map(y => chip('year', y, y)).join('')}
+      </div>
+    </div>
+    <div id="m-list"></div>`;
 
   const isImg = kind === 'selfie' || kind === 'photo';
-  const byCall = new Map();
-  items.forEach((it, i) => { if (!byCall.has(it.call)) byCall.set(it.call, []); byCall.get(it.call).push([it, i]); });
-  lbGroups[kind] = items;
   const card = ([it, i]) => (isImg ? figure(it, kind, i)
     : kind === 'links' ? linkCard({ ...it, caption: `${it.caption} · ${it.question}` })
     : textCard({ ...it, caption: `${it.caption} · ${it.question}` }));
-  app.innerHTML = `<h1 class="sr">${label}</h1>` + [...byCall].map(([call, list]) => `
-    <h2 class="label sec"><a href="#/call/${call.number}">[${callName(call)}]</a> ${esc(call.title)}</h2>
-    <div class="grid ${isImg ? '' : 'text'}">${list.map(card).join('')}</div>`).join('');
-  hydrate();
+
+  function draw() {
+    const items = all.filter(it => (!filter.name || it.name === filter.name) && (!filter.year || yearOf(it) === filter.year));
+    for (const b of $$('.chip', app)) {
+      const v = b.dataset.v;
+      b.setAttribute('aria-pressed', String(String(filter[b.dataset.f] ?? '') === v));
+    }
+    $('#m-count').textContent = `(${items.length})`;
+    const q = new URLSearchParams();
+    if (filter.name) q.set('name', slug(filter.name));
+    if (filter.year) q.set('year', filter.year);
+    history.replaceState(null, '', `${location.pathname}${location.search}#/m/${kind}${q.size ? `?${q}` : ''}`);
+
+    lbGroups[kind] = items;
+    const byCall = new Map();
+    items.forEach((it, i) => { if (!byCall.has(it.call)) byCall.set(it.call, []); byCall.get(it.call).push([it, i]); });
+    $('#m-list').innerHTML = items.length ? [...byCall].map(([call, list]) => `
+      <h2 class="label sec"><a href="#/call/${call.number}">[${callName(call)}]</a> ${esc(call.title)}</h2>
+      <div class="grid ${isImg ? '' : 'text'}">${list.map(card).join('')}</div>`).join('')
+      : '<p class="muted pad center">Nothing for these filters.</p>';
+    hydrate($('#m-list'));
+  }
+  $('.filters', app).addEventListener('click', e => {
+    const b = e.target.closest('.chip');
+    if (!b) return;
+    const v = b.dataset.v;
+    filter[b.dataset.f] = !v ? null : b.dataset.f === 'year' ? Number(v) : v;
+    draw();
+  });
+  draw();
 }
 
 // ── Admin ──────────────────────────────────────────────────────────────────
@@ -947,13 +1000,14 @@ async function route() {
   if (!state.session) return viewLogin();
   if (!state.me) return viewNotMember();
   closeLightbox();
-  const [, a, b] = (location.hash.replace(/^#/, '') || '/').split('/');
+  const [path, query = ''] = (location.hash.replace(/^#/, '') || '/').split('?');
+  const [, a, b] = (path || '/').split('/');
   window.scrollTo(0, 0);
   try {
     if (!a) return await viewHome();
     if (a === 'calls') return viewCalls();
     if (a === 'call') return await viewCall(b);
-    if (a === 'm') return await viewMaterial(b);
+    if (a === 'm') return await viewMaterial(b, new URLSearchParams(query));
     if (a === 'admin') return viewAdmin(b);
     if (a === 'about') return viewAbout();
     viewNotFound();
