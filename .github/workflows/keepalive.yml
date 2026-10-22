@@ -1,21 +1,31 @@
-# Free Supabase projects pause after ~7 days without activity: ping the API every 3 days.
+# Free Supabase projects pause after a period of low activity. Every day this job
+# writes a timestamp through the keepalive() function (sql/006_keepalive.sql) and
+# reads a table, so the database sees real activity. If the project is already
+# paused the job fails, and GitHub emails a failure notice.
 # GitHub also disables scheduled workflows after 60 days without commits, so once a
 # month this job commits a timestamp to keep itself alive.
 name: keepalive
 on:
   schedule:
-    - cron: '17 6 */3 * *'
+    - cron: '17 6 * * *'
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   ping:
     runs-on: ubuntu-latest
+    env:
+      URL: https://odeqxbrkacgkcgmfwqpx.supabase.co
+      KEY: sb_publishable_V8NZJWRhNFDCtGYfzr05sA_8KDf2P94
     steps:
-      - name: Ping Supabase
+      - name: Write heartbeat
         run: |
-          curl -fsS "https://odeqxbrkacgkcgmfwqpx.supabase.co/rest/v1/calls?select=id&limit=1" \
-            -H "apikey: sb_publishable_V8NZJWRhNFDCtGYfzr05sA_8KDf2P94" -o /dev/null -w "%{http_code}\n"
+          curl -fsS -X POST "$URL/rest/v1/rpc/keepalive" \
+            -H "apikey: $KEY" -H "Content-Type: application/json" -d '{}'
+          echo
+      - name: Read a table
+        run: |
+          curl -fsS "$URL/rest/v1/calls?select=id&limit=1" -H "apikey: $KEY" -o /dev/null -w "%{http_code}\n"
       - uses: actions/checkout@v4
       - name: Monthly heartbeat commit
         run: |
