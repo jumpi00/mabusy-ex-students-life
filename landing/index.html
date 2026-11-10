@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MABusy[ex]Students_life — Project</title>
+  <meta name="description" content="A private archive for the monthly video calls of five former MA students living in five different cities. Everything stays locked until the call begins.">
+  <meta property="og:title" content="MABusy[ex]Students_life">
+  <meta property="og:description" content="A private archive for our monthly calls. Everything stays locked until the call begins.">
+  <meta property="og:image" content="https://jumpi00.github.io/mabusy-ex-students-life/landing/img/home.jpg">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap">
+  <style>
+    :root {
+      --bg: #ffffff; --fg: #000000; --muted: #767676; --soft: #d9d9d9; --panel: #f0f0f0; --accent: #c4262e;
+      --gutter: 32px; --big: clamp(30px, 4.6vw, 64px);
+      font-family: "Geist Mono", ui-monospace, Menlo, monospace; font-weight: 400;
+      color: var(--fg); background: var(--bg); letter-spacing: -.01em; -webkit-font-smoothing: antialiased;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); font-size: 15px; line-height: 1.55; }
+    a { color: inherit; }
+    a:hover { opacity: .55; }
+    :focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+    img { display: block; max-width: 100%; height: auto; }
+    .label { font-size: 13px; color: var(--muted); margin: 0 0 20px; font-weight: 400; }
+    .muted { color: var(--muted); }
+
+    header.top {
+      position: sticky; top: 0; z-index: 10; background: var(--bg);
+      display: flex; justify-content: space-between; align-items: baseline; gap: 20px;
+      padding: 22px var(--gutter);
+    }
+    .logo { font-size: 18px; text-decoration: none; }
+    .top nav { display: flex; gap: 22px; font-size: 14px; flex-wrap: wrap; justify-content: flex-end; }
+    .top nav a { text-decoration: none; }
+    .top nav a.go { text-decoration: underline; text-underline-offset: 4px; }
+
+    main { padding: 0 var(--gutter); }
+    section { padding: 90px 0 0; }
+    .hero { padding-top: 110px; }
+    .hero h1 { font-size: var(--big); line-height: 1.08; font-weight: 400; letter-spacing: -.035em; margin: 0 0 36px; max-width: 16ch; }
+    .hero .lead { font-size: clamp(17px, 1.6vw, 21px); line-height: 1.5; max-width: 60ch; margin: 0 0 48px; }
+    .cta { display: flex; gap: 14px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; min-height: 52px;
+      padding: 14px 24px; border: 1px solid var(--fg); text-decoration: none; font-size: 15px;
+    }
+    .btn.fill { background: var(--fg); color: var(--bg); }
+    .btn:hover { opacity: 1; background: var(--fg); color: var(--bg); }
+    .btn.fill:hover { background: var(--bg); color: var(--fg); }
+
+    .cols { display: grid; grid-template-columns: 1fr 2fr; gap: 40px; border-top: 1px solid var(--fg); padding-top: 22px; }
+    .cols h2 { font-size: 13px; color: var(--muted); font-weight: 400; margin: 0; }
+    .prose p { margin: 0 0 18px; max-width: 64ch; font-size: 16px; }
+    .prose p.big { font-size: clamp(20px, 2.2vw, 28px); line-height: 1.35; letter-spacing: -.02em; }
+
+    .links { list-style: none; margin: 0; padding: 0; }
+    .links li { display: grid; grid-template-columns: minmax(180px, 1fr) 2fr; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--soft); }
+    .links li:first-child { padding-top: 0; }
+    .links a { font-size: clamp(18px, 1.8vw, 24px); text-decoration: underline; text-underline-offset: 5px; overflow-wrap: anywhere; }
+    .links span { color: var(--muted); font-size: 14px; }
+
+    .steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+    .steps li { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 0 0 30px; }
+    .steps li::before { counter-increment: s; content: "0" counter(s); font-size: clamp(22px, 2.4vw, 32px); line-height: 1.1; }
+    .steps h3 { font-size: clamp(20px, 2vw, 26px); font-weight: 400; margin: 0 0 8px; line-height: 1.2; letter-spacing: -.02em; }
+    .steps p { margin: 0; max-width: 62ch; }
+
+    .shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 56px 32px; margin-top: 10px; }
+    .shots figure { margin: 0; }
+    .shots figure.wide { grid-column: 1 / -1; }
+    .shots img { border: 1px solid var(--soft); background: var(--panel); }
+    .shots figcaption { font-size: 13px; margin-top: 12px; }
+    .shots figcaption b { font-weight: 400; }
+    .shots figcaption span { color: var(--muted); display: block; }
+    .phones { display: flex; gap: 32px; align-items: flex-start; }
+    .phones img { width: 260px; border-radius: 22px; }
+
+    .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 40px; list-style: none; margin: 0; padding: 0; }
+    .features li { padding: 14px 0; border-bottom: 1px solid var(--soft); }
+    .features b { font-weight: 500; display: block; }
+
+    dl.spec { display: grid; grid-template-columns: minmax(150px, 1fr) 2fr; gap: 10px 20px; margin: 0; }
+    dl.spec dt { color: var(--muted); }
+    dl.spec dd { margin: 0; }
+
+    footer {
+      margin: 120px var(--gutter) 0; padding: 18px 0 28px; border-top: 1px solid var(--soft);
+      display: flex; justify-content: space-between; gap: 16px; color: var(--muted); font-size: 13px;
+    }
+    footer a { white-space: nowrap; text-underline-offset: 3px; }
+
+    @media (max-width: 800px) {
+      :root { --gutter: 18px; }
+      body { font-size: 16px; }
+      .top nav a:not(.go) { display: none; }
+      .hero { padding-top: 60px; }
+      .cta .btn { width: 100%; }
+      .cols { grid-template-columns: 1fr; gap: 18px; }
+      .links li { grid-template-columns: 1fr; gap: 4px; }
+      .shots { grid-template-columns: 1fr; gap: 40px; }
+      .phones { gap: 14px; }
+      .phones img { width: calc(50% - 7px); border-radius: 14px; }
+      .features { grid-template-columns: 1fr; }
+      dl.spec { grid-template-columns: 1fr; gap: 2px; }
+      dl.spec dd { margin-bottom: 12px; }
+      .steps li { grid-template-columns: 52px 1fr; }
+      footer { font-size: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a href="#top" class="logo">MABusy[ex]Students_life</a>
+    <nav aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#screens">Screens</a>
+      <a href="#details">Details</a>
+      <a class="go" href="https://jumpi00.github.io/mabusy-ex-students-life/?demo">Try the demo →</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <p class="label">[Project]</p>
+      <h1>An archive for our monthly calls.</h1>
+      <p class="lead">Five former MA students, five cities, one video call a month. Before each call everyone shares a selfie, answers a few questions and uploads photos and links. Nothing can be seen until the call begins. Then it all unlocks at once, becomes a shared presentation, and stays in the archive for good.</p>
+      <div class="cta">
+        <a class="btn fill" href="https://jumpi00.github.io/mabusy-ex-students-life/?demo">Try the demo</a>
+        <a class="btn" href="https://jumpi00.github.io/mabusy-ex-students-life/">Open the live archive</a>
+      </div>
+    </section>
+
+    <section id="links">
+      <div class="cols">
+        <h2>[Links]</h2>
+        <ul class="links">
+          <li>
+            <a href="https://jumpi00.github.io/mabusy-ex-students-life/?demo">Demo</a>
+            <span>The full site with invented content. No login needed, nothing is saved: reload to start again.</span>
+          </li>
+          <li>
+            <a href="https://jumpi00.github.io/mabusy-ex-students-life/?demo#/call/1">Demo · an unlocked call</a>
+            <span>Call_001, uploaded by all five members. Press “Play the show” to see the call-day presentation.</span>
+          </li>
+          <li>
+            <a href="https://jumpi00.github.io/mabusy-ex-students-life/?demo#/call/2">Demo · an open call</a>
+            <span>Call_002, still locked: countdown, who has submitted, and the contribution form to try.</span>
+          </li>
+          <li>
+            <a href="https://jumpi00.github.io/mabusy-ex-students-life/?demo#/m/photo">Demo · the archive</a>
+            <span>Every photo across calls, filterable by person and by year.</span>
+          </li>
+          <li>
+            <a href="https://jumpi00.github.io/mabusy-ex-students-life/">Live site</a>
+            <span>The real archive. Private: only the five members can log in.</span>
+          </li>
+          <li>
+            <a href="https://github.com/jumpi00/mabusy-ex-students-life">Source code</a>
+            <span>Public repository on GitHub. Member emails are never committed.</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="idea">
+      <div class="cols">
+        <h2>[The idea]</h2>
+        <div class="prose">
+          <p class="big">After the MA we scattered across the world. A monthly call keeps us together, but the conversations disappear as soon as we hang up.</p>
+          <p>The archive gives each call a small ritual. In the days before it, everyone quietly prepares their contribution. At the agreed time the site unlocks for everybody simultaneously, and the call opens with a presentation of what each person has been up to.</p>
+          <p>Over the months it builds into a record of where we were, what we were looking at and what we were thinking about: a shared diary written five ways.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="cols">
+        <h2>[How it works]</h2>
+        <ol class="steps">
+          <li>
+            <div>
+              <h3>The admin opens a call</h3>
+              <p>They set the unlock time and write the questions. Each question is text, photo or link, required or optional, single or several. The selfie is a default question in every call.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>Everyone contributes</h3>
+              <p>Members log in with a one-time email link or code. Answers save automatically as a draft; Submit marks them as done, and everything stays editable until the unlock. A pop-up and a red notice remind anyone who hasn’t submitted yet.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>Nothing is visible until the call</h3>
+              <p>Before the unlock, the others see only who is ready: ● submitted, ◐ draft, ○ not started. The lock is enforced by the database itself, so not even the admin can look early.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>Call day becomes a show</h3>
+              <p>When the countdown reaches zero the site asks whether everyone is connected. The presentation picks people in a random order, revealed with a name roulette, and scrolls horizontally through each person’s selfie, photos and answers. Watching together, one click moves everyone on to the next person.</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>It all stays in the archive</h3>
+              <p>Every call keeps its own page, and the materials (selfies, photos, texts and links) can be browsed across all calls and filtered by person and year.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="screens">
+      <div class="cols">
+        <h2>[Screens]</h2>
+        <div class="shots">
+          <figure class="wide">
+            <img src="img/home.jpg" width="1800" height="1125" alt="Home page: three columns listing calls, materials with counts, and members. A red notice says Call_002 is open and the user's contribution is missing." loading="lazy">
+            <figcaption><b>fig_01_index</b><span>The index. While an upload is due, the reminder stays red until the deadline.</span></figcaption>
+          </figure>
+          <figure>
+            <img src="img/call-locked.jpg" width="1800" height="1125" alt="A locked call with a large countdown, the unlock date in the viewer's timezone, and the names of the five members with their submission status." loading="lazy">
+            <figcaption><b>fig_02_locked</b><span>An open call: countdown in each viewer’s own timezone and who is ready.</span></figcaption>
+          </figure>
+          <figure>
+            <img src="img/call-unlocked.jpg" width="1800" height="1125" alt="An unlocked call page with a Play the show button and grids of selfies and window photos, each with an archive-style caption." loading="lazy">
+            <figcaption><b>fig_03_unlocked</b><span>After the unlock: every contribution, grouped by question.</span></figcaption>
+          </figure>
+          <figure class="wide">
+            <img src="img/show-intro.jpg" width="1800" height="1125" alt="The show: a member's name in very large type next to their selfie, with the next photo visible to the right." loading="lazy">
+            <figcaption><b>fig_04_show</b><span>The call-day presentation, one person at a time in a random order.</span></figcaption>
+          </figure>
+          <figure>
+            <img src="img/show-photos.jpg" width="1800" height="1125" alt="The show scrolled sideways to a member's window photos with their captions." loading="lazy">
+            <figcaption><b>fig_05_show_scroll</b><span>Each person is a horizontal strip of photos, answers and links.</span></figcaption>
+          </figure>
+          <figure>
+            <img src="img/materials.jpg" width="1800" height="1125" alt="The Photo archive page with filters for name and year above a grid of photos." loading="lazy">
+            <figcaption><b>fig_06_materials</b><span>The archive, filterable by person and year.</span></figcaption>
+          </figure>
+          <figure class="wide">
+            <div class="phones">
+              <img src="img/mobile-home.jpg" width="780" height="1688" alt="The index on a phone." loading="lazy">
+              <img src="img/mobile-form.jpg" width="780" height="1688" alt="The contribution form on a phone, with required questions, large upload buttons and a full-width Submit button." loading="lazy">
+            </div>
+            <figcaption><b>fig_07_mobile</b><span>Designed for phones too: 16px text, large touch targets, full-width main buttons.</span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="details">
+      <div class="cols">
+        <h2>[Details]</h2>
+        <ul class="features">
+          <li><b>Timed unlock</b>Enforced by row-level security in the database and storage, not by hiding things in the page.</li>
+          <li><b>Passwordless login</b>One-time link or 6-digit code by email, sent only to the five members’ addresses.</li>
+          <li><b>Light photos</b>Resized in the browser before upload: a 1.1 MB photo becomes about 150 KB, plus a 20 KB thumbnail.</li>
+          <li><b>Privacy</b>Location and other metadata are stripped from every photo. Files sit in a private bucket behind signed URLs.</li>
+          <li><b>Drafts and Submit</b>Autosave as you type; required answers are checked, with clear errors, before submitting.</li>
+          <li><b>Shared presentation</b>Same random order for everyone; in “together” mode the person on screen is synced live.</li>
+          <li><b>Every timezone</b>Dates and countdowns are shown in each viewer’s local time.</li>
+          <li><b>Accessible</b>WCAG 2.1 AA contrast, keyboard navigation, screen-reader labels and reduced-motion support, checked with axe.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="built">
+      <div class="cols">
+        <h2>[Built with]</h2>
+        <dl class="spec">
+          <dt>Front end</dt><dd>Plain HTML, CSS and JavaScript modules. No framework, no build step.</dd>
+          <dt>Hosting</dt><dd>GitHub Pages</dd>
+          <dt>Back end</dt><dd>Supabase: Postgres with row-level security, Auth, Storage and Realtime</dd>
+          <dt>Automation</dt><dd>A daily GitHub Action keeps the free database awake and emails a warning if it stops</dd>
+          <dt>Typeface</dt><dd>Geist Mono</dd>
+          <dt>Design reference</dt><dd>The archive of <a href="https://as-associates.jp/">AS (Jun Aoki &amp; Associates)</a>: numbered entries, bracketed labels, a quiet grid</dd>
+          <dt>Running cost</dt><dd>£0 a month</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section id="try">
+      <div class="cols">
+        <h2>[Try it]</h2>
+        <div class="prose">
+          <p class="big">The demo is the real site with invented content, so you can click through everything without an account.</p>
+          <div class="cta">
+            <a class="btn fill" href="https://jumpi00.github.io/mabusy-ex-students-life/?demo">Open the demo</a>
+            <a class="btn" href="https://jumpi00.github.io/mabusy-ex-students-life/?demo#/call/1">Go straight to the show</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>©2026 Giampaolo Zirone and MA Busy [ex] students Team</span>
+    <a href="mailto:hello@giampaolozirone.com?subject=MABusy%5Bex%5DStudents_life%20-%20">Contact me</a>
+  </footer>
+</body>
+</html>
