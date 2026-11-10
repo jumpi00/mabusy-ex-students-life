@@ -106,6 +106,7 @@
     .field input:focus, .field textarea:focus { border-color: var(--fg); box-shadow: 0 1px 0 var(--fg); }
     .field textarea:focus { box-shadow: none; }
     .hp { position: absolute; left: -9999px; }
+    .field .opt { color: var(--muted); }
     .send { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
     .send .btn { cursor: pointer; font: inherit; font-size: 15px; }
     .status { margin: 0; font-size: 14px; }
@@ -329,8 +330,8 @@
             <input id="cf-name" name="name" type="text" autocomplete="name" required>
           </div>
           <div class="field">
-            <label for="cf-email">Email</label>
-            <input id="cf-email" name="email" type="email" autocomplete="email" required>
+            <label for="cf-email">Email <span class="opt">(optional, if you'd like a reply)</span></label>
+            <input id="cf-email" name="email" type="email" autocomplete="email">
           </div>
           <div class="field">
             <label for="cf-message">Message</label>
