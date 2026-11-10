@@ -106,6 +106,17 @@
     .field input:focus, .field textarea:focus { border-color: var(--fg); box-shadow: 0 1px 0 var(--fg); }
     .field textarea:focus { box-shadow: none; }
     .hp { position: absolute; left: -9999px; }
+    .contact-dialog {
+      width: min(560px, calc(100vw - 2 * var(--gutter))); max-height: calc(100dvh - 40px);
+      border: 1px solid var(--fg); border-radius: 0; padding: 26px 28px 30px; background: var(--bg); color: var(--fg);
+    }
+    .contact-dialog::backdrop { background: rgba(255, 255, 255, .88); }
+    .contact-dialog .contact { max-width: none; }
+    .cd-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
+    .cd-head .label { margin: 0; }
+    .cd-close { background: none; border: 0; padding: 6px 0; font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+    .cd-done .big { font-size: clamp(20px, 2.2vw, 26px); line-height: 1.35; margin: 10px 0 26px; }
+    #contact .btn { cursor: pointer; font: inherit; font-size: 15px; }
     .field .opt { color: var(--muted); }
     .send { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
     .send .btn { cursor: pointer; font: inherit; font-size: 15px; }
@@ -129,6 +140,9 @@
       .steps li { grid-template-columns: 52px 1fr; }
       footer { font-size: 14px; }
       .send .btn { width: 100%; }
+      #contact .btn, .cd-done .btn { width: 100%; }
+      .contact-dialog { padding: 20px 18px 24px; }
+      .cd-close { min-height: 44px; font-size: 16px; }
     }
     @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
   </style>
@@ -322,42 +336,73 @@
     <section id="contact">
       <div class="cols">
         <h2>[Get in touch]</h2>
-        <form class="contact" id="contact-form" action="https://formspree.io/f/mrpqzgkj" method="POST">
+        <div class="contact">
           <p class="big">Questions, feedback, or want something similar for your own group? Write to me.</p>
-          <input type="hidden" name="_subject" value="MABusy[ex]Students_life · landing page">
-          <div class="field">
-            <label for="cf-name">Name</label>
-            <input id="cf-name" name="name" type="text" autocomplete="name" required>
-          </div>
-          <div class="field">
-            <label for="cf-email">Email <span class="opt">(optional, if you'd like a reply)</span></label>
-            <input id="cf-email" name="email" type="email" autocomplete="email">
-          </div>
-          <div class="field">
-            <label for="cf-message">Message</label>
-            <textarea id="cf-message" name="message" rows="5" required></textarea>
-          </div>
-          <p class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="_gotcha" tabindex="-1" autocomplete="off"></label></p>
-          <div class="send">
-            <button class="btn fill" type="submit">Send message</button>
-            <p class="status" id="cf-status" role="status" aria-live="polite"></p>
-          </div>
-        </form>
+          <button type="button" class="btn fill" id="open-contact" aria-haspopup="dialog">Write to me</button>
+          <noscript><p><a href="mailto:hello@giampaolozirone.com">hello@giampaolozirone.com</a></p></noscript>
+        </div>
       </div>
     </section>
   </main>
+
+  <dialog class="contact-dialog" id="contact-dialog" aria-labelledby="cd-title">
+    <div class="cd-head">
+      <p class="label" id="cd-title">[Get in touch]</p>
+      <button type="button" class="cd-close" id="close-contact" aria-label="Close">Close</button>
+    </div>
+    <form class="contact" id="contact-form" action="https://formspree.io/f/mrpqzgkj" method="POST">
+      <input type="hidden" name="_subject" value="MABusy[ex]Students_life · landing page">
+      <div class="field">
+        <label for="cf-name">Name</label>
+        <input id="cf-name" name="name" type="text" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label for="cf-email">Email <span class="opt">(optional, if you'd like a reply)</span></label>
+        <input id="cf-email" name="email" type="email" autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="cf-message">Message</label>
+        <textarea id="cf-message" name="message" rows="5" required></textarea>
+      </div>
+      <p class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="_gotcha" tabindex="-1" autocomplete="off"></label></p>
+      <div class="send">
+        <button class="btn fill" type="submit">Send message</button>
+        <p class="status" id="cf-status" role="status" aria-live="polite"></p>
+      </div>
+    </form>
+    <div class="cd-done" id="cd-done" hidden>
+      <p class="big">Thank you, your message has been sent.</p>
+      <button type="button" class="btn" id="done-contact">Close</button>
+    </div>
+  </dialog>
 
   <footer>
     <span>©2026 Giampaolo Zirone and MA Busy [ex] students Team</span>
     <a href="mailto:hello@giampaolozirone.com?subject=MABusy%5Bex%5DStudents_life%20-%20">Contact me</a>
   </footer>
   <script>
-    // Send through Formspree without leaving the page; without JS the form posts normally.
+    // "Write to me" opens the form in a native dialog (focus trap + Esc for free),
+    // and it is sent through Formspree without leaving the page.
+    const dialog = document.getElementById('contact-dialog');
     const form = document.getElementById('contact-form');
     const status = document.getElementById('cf-status');
+    const done = document.getElementById('cd-done');
+    document.getElementById('open-contact').addEventListener('click', () => {
+      form.hidden = false; done.hidden = true;
+      status.className = 'status'; status.textContent = '';
+      dialog.showModal();
+      document.getElementById('cf-name').focus();
+    });
+    document.getElementById('close-contact').addEventListener('click', () => dialog.close());
+    document.getElementById('done-contact').addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', e => {  // close only on a click outside the box (the backdrop)
+      if (e.target !== dialog) return;
+      const r = dialog.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) dialog.close();
+    });
     form.addEventListener('submit', async e => {
       e.preventDefault();
-      const btn = form.querySelector('button');
+      const btn = form.querySelector('button[type=submit]');
       btn.disabled = true;
       status.className = 'status';
       status.textContent = 'Sending…';
@@ -368,7 +413,8 @@
           throw new Error(data.errors?.map(x => x.message).join(', ') || 'The message could not be sent.');
         }
         form.reset();
-        status.textContent = 'Thank you, your message has been sent.';
+        form.hidden = true; done.hidden = false;
+        document.getElementById('done-contact').focus();
       } catch (err) {
         status.className = 'status err';
         status.textContent = `${err.message} Please try again, or email hello@giampaolozirone.com.`;
