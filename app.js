@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202610111016') : await import('./api.js?v=202610111016');
-import { SITE_NAME } from './config.js?v=202610111016';
+const api = DEMO ? await import('./demo.js?v=202611101859') : await import('./api.js?v=202611101859');
+import { SITE_NAME } from './config.js?v=202611101859';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -1169,7 +1169,7 @@ async function startShow(call, together) {
     <div class="track" id="track"></div>
     <div class="show-foot">
       <ul class="who" aria-label="People">${people.map((p, i) => `<li><button type="button" class="link" data-p="${i}">${esc(p.name)}</button></li>`).join('')}</ul>
-      <span class="muted small hint">${together ? 'Together: clicks move the show for everyone' : 'On your own'} · <span class="desk">scroll or ← →</span><span class="mob">swipe</span></span>
+      <span class="muted small hint"><span class="desk">Scroll or use ← → to browse</span><span class="mob">Swipe to browse</span> · ${together ? '“Next person” moves everyone' : 'On your own'}</span>
     </div>`;
   document.body.append(el);
   document.body.classList.add('noscroll');
