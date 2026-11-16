@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611161559') : await import('./api.js?v=202611161559');
-import { SITE_NAME } from './config.js?v=202611161559';
+const api = DEMO ? await import('./demo.js?v=202611161600') : await import('./api.js?v=202611161600');
+import { SITE_NAME } from './config.js?v=202611161600';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -326,7 +326,7 @@ function viewNotMember() {
 
 async function viewHome() {
   setTitle('');
-  setBar('Index');
+  setBar('Index', '', '<button type="button" class="btn fb-btn" id="fb-open" aria-haspopup="dialog">Send feedback</button>');
   const calls = state.calls;
   const pending = pendingCalls();
   const due = pending[0];
@@ -360,10 +360,6 @@ async function viewHome() {
         <ul class="small">${state.members.map(m => `<li>${esc(m.name)}</li>`).join('')}</ul>
         <ul class="small"><li><button class="link" id="out">Log out</button></li></ul>
       </div>
-    </section>
-    <section class="feedback">
-      <h2 class="label">[Feedback]</h2>
-      <button type="button" class="btn fb-btn" id="fb-open" aria-haspopup="dialog">Send feedback</button>
     </section>`;
   $('#out').onclick = async () => { await api.signOut(); boot(); };
   $('#fb-open').onclick = openFeedback;
