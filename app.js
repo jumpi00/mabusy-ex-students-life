@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611160831') : await import('./api.js?v=202611160831');
-import { SITE_NAME } from './config.js?v=202611160831';
+const api = DEMO ? await import('./demo.js?v=202611161559') : await import('./api.js?v=202611161559');
+import { SITE_NAME } from './config.js?v=202611161559';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -363,8 +363,7 @@ async function viewHome() {
     </section>
     <section class="feedback">
       <h2 class="label">[Feedback]</h2>
-      <p>Something not working, or an idea to make the archive better?</p>
-      <button type="button" class="btn" id="fb-open" aria-haspopup="dialog">Send feedback</button>
+      <button type="button" class="btn fb-btn" id="fb-open" aria-haspopup="dialog">Send feedback</button>
     </section>`;
   $('#out').onclick = async () => { await api.signOut(); boot(); };
   $('#fb-open').onclick = openFeedback;

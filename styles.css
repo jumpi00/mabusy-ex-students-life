@@ -66,8 +66,9 @@ main { padding: 0 var(--gutter); }
 .index .big { font-size: var(--big); line-height: 1.17; margin-bottom: .55em; }
 .index .big.gap { margin-top: 1em; }
 .index .next { margin-top: 26px; line-height: 1.5; }
-.feedback { margin-top: 70px; padding: 26px 0 40px; border-top: 1px solid var(--line); }
-.feedback p { margin: 10px 0 18px; }
+.feedback { margin-top: 70px; padding: 14px 0 40px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 18px; }
+.feedback .label { margin: 0; }
+.feedback .btn.fb-btn { font-size: 12px; line-height: 1.2; padding: 3px 10px; width: auto; }
 .fb-form .field { margin: 18px 0; }
 .fb-form .field label { display: block; margin-bottom: 6px; }
 .index .small-col ul { margin-bottom: 18px; line-height: 1.45; }
@@ -339,6 +340,7 @@ body { padding-bottom: calc(var(--foot-h) + var(--bar-h)); }
   .link.x { font-size: 20px; min-width: 48px; }
   .login .btn, .modal-card .btn, .admin .row .btn, .field .btn { width: 100%; }
   .field [data-add] + .small { display: block; margin: 8px 0 0; }
+  .feedback .btn.fb-btn { font-size: 13px; padding: 4px 12px; min-height: 0; }
   .modal-card .row { flex-direction: column; align-items: stretch; gap: 6px; }
   .modal-card .row .link { justify-content: center; }
   .modal-card .lead { font-size: 22px; }
