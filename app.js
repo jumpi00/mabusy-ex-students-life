@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611101859') : await import('./api.js?v=202611101859');
-import { SITE_NAME } from './config.js?v=202611101859';
+const api = DEMO ? await import('./demo.js?v=202611160831') : await import('./api.js?v=202611160831');
+import { SITE_NAME } from './config.js?v=202611160831';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -360,8 +360,14 @@ async function viewHome() {
         <ul class="small">${state.members.map(m => `<li>${esc(m.name)}</li>`).join('')}</ul>
         <ul class="small"><li><button class="link" id="out">Log out</button></li></ul>
       </div>
+    </section>
+    <section class="feedback">
+      <h2 class="label">[Feedback]</h2>
+      <p>Something not working, or an idea to make the archive better?</p>
+      <button type="button" class="btn" id="fb-open" aria-haspopup="dialog">Send feedback</button>
     </section>`;
   $('#out').onclick = async () => { await api.signOut(); boot(); };
+  $('#fb-open').onclick = openFeedback;
 
   const data = await loadArchive();
   const groups = [['selfie', 'photo'], ['text', 'links']];
@@ -1072,6 +1078,62 @@ function openModal(inner) {
   release = trapFocus(el);
   $('.btn', el)?.focus();
   return el;
+}
+
+// Feedback form (Formspree), opened from the home page.
+const FEEDBACK_URL = 'https://formspree.io/f/mrpqzgkj';
+function openFeedback() {
+  const m = openModal(`
+    <p class="label">[Feedback]</p>
+    <p class="lead" id="modal-title">Send feedback</p>
+    <form id="fb" class="fb-form" novalidate>
+      <div class="field">
+        <label for="fb-name">Name</label>
+        <input id="fb-name" name="name" class="line" autocomplete="name" value="${esc(state.me?.name ?? '')}">
+      </div>
+      <div class="field">
+        <label for="fb-email">Email <span class="muted">(optional, if you'd like a reply)</span></label>
+        <input id="fb-email" name="email" type="email" class="line" autocomplete="email" value="${esc(state.session?.user?.email ?? '')}">
+      </div>
+      <div class="field">
+        <label for="fb-msg">Message</label>
+        <textarea id="fb-msg" name="message" rows="5" class="area" required aria-describedby="fb-err"></textarea>
+        <p class="err" id="fb-err" role="alert"></p>
+      </div>
+      <input type="hidden" name="_subject" value="${esc(SITE_NAME)} · feedback">
+      <div class="row">
+        <button type="submit" class="btn">Send feedback</button>
+        <button type="button" class="link" data-close>Cancel</button>
+      </div>
+    </form>`);
+  $('#fb-msg', m).focus();
+  const form = $('#fb', m);
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const err = $('#fb-err', m);
+    const btn = $('button[type=submit]', form);
+    if (!form.message.value.trim()) { err.textContent = 'Write a message first.'; form.message.focus(); return; }
+    err.textContent = '';
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      if (DEMO) await new Promise(r => setTimeout(r, 600));
+      else {
+        const res = await fetch(FEEDBACK_URL, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.errors?.map(x => x.message).join(', ') || 'The feedback could not be sent.');
+        }
+      }
+      m.set(`
+        <p class="label">[Feedback]</p>
+        <p class="lead" id="modal-title">Thank you, your feedback has been sent.</p>
+        ${DEMO ? '<p class="muted small">Demo mode: nothing was actually sent.</p>' : ''}
+        <div class="row"><button type="button" class="btn" data-close>Close</button></div>`);
+    } catch (x) {
+      err.textContent = `${x.message} Please try again.`;
+      btn.disabled = false; btn.textContent = 'Send feedback';
+    }
+  };
 }
 
 const onceThisSession = key => {

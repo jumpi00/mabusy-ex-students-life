@@ -66,6 +66,10 @@ main { padding: 0 var(--gutter); }
 .index .big { font-size: var(--big); line-height: 1.17; margin-bottom: .55em; }
 .index .big.gap { margin-top: 1em; }
 .index .next { margin-top: 26px; line-height: 1.5; }
+.feedback { margin-top: 70px; padding: 26px 0 40px; border-top: 1px solid var(--line); }
+.feedback p { margin: 10px 0 18px; }
+.fb-form .field { margin: 18px 0; }
+.fb-form .field label { display: block; margin-bottom: 6px; }
 .index .small-col ul { margin-bottom: 18px; line-height: 1.45; }
 
 /* Datasheet */
