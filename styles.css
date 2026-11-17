@@ -370,3 +370,12 @@ body { padding-bottom: calc(var(--foot-h) + var(--bar-h)); }
   .lead { font-size: 22px; }
   .field .q, .field label.q { font-size: 18px; }
 }
+
+/* Select that looks like a .btn (e.g. "Copy questions from…" next to "+ Add question") */
+select.btn.select {
+  font-family: inherit; color: var(--fg); -webkit-appearance: none; appearance: none; width: auto;
+  padding-right: 38px; line-height: inherit;
+  background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23000' stroke-width='1.2'/%3E%3C/svg%3E") no-repeat right 14px center;
+}
+select.btn.select:hover { background-color: var(--bg); color: var(--fg); border-color: var(--fg); }
+select.btn.select:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
