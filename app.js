@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611161602') : await import('./api.js?v=202611161602');
-import { SITE_NAME } from './config.js?v=202611161602';
+const api = DEMO ? await import('./demo.js?v=202611171512') : await import('./api.js?v=202611171512');
+import { SITE_NAME } from './config.js?v=202611171512';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -480,6 +480,7 @@ async function renderUnlocked(call, body) {
       return inner && `<h2 class="label sec">[Q${qi + 1}] ${esc(q.text)}</h2>${inner}`;
     }).join('')}
     ${people.length ? '' : '<p class="muted center">Nobody uploaded anything for this call.</p>'}
+    <section class="notes" id="notes" aria-label="Call notes"></section>
     <dl class="meta">
       <dt>No.</dt><dd>${pad(call.number)}</dd>
       <dt>Title</dt><dd>${esc(call.title || '—')}</dd>
@@ -500,6 +501,90 @@ async function renderUnlocked(call, body) {
       if (e.target.closest('[data-solo]')) startShow(call, false);
     });
   hydrate();
+  renderNotes(call, $('#notes'));
+}
+
+// ── Call notes: summary + transcript. Any member can write them once the call is unlocked.
+const NOTE_KINDS = [
+  ['summary', 'Summary', 'The main points of what we said.', 8],
+  ['transcript', 'Transcript', 'Paste the transcript, or load it from a file (.txt, .vtt, .srt).', 16],
+];
+
+// Subtitle files (.vtt/.srt) → plain lines with [hh:mm:ss] stamps.
+function cleanTranscript(text) {
+  return text.replace(/\r/g, '').replace(/^WEBVTT.*\n+/, '').split('\n')
+    .filter(l => !/^\d+$/.test(l.trim()))
+    .map(l => l.replace(/^(\d{1,2}:\d{2}:\d{2})[.,]\d+\s*-->.*$/, '[$1]'))
+    .join('\n').replace(/(\[\d{1,2}:\d{2}:\d{2}\])\n/g, '$1 ').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+async function renderNotes(call, root) {
+  if (!root) return;
+  let notes;
+  try { notes = (await api.getNotes(call.id)) || {}; }
+  catch { root.innerHTML = '<p class="small muted">Summary and transcript are not available yet.</p>'; return; }
+
+  const draw = () => {
+    const who = notes.updated_by && (member(notes.updated_by)?.name || notes.updated_by);
+    root.innerHTML = NOTE_KINDS.map(([k, label]) => {
+      const text = notes[k] || '';
+      const lines = text ? text.split('\n').length : 0;
+      const content = !text
+        ? `<p class="small muted">No ${label.toLowerCase()} yet.</p>`
+        : k === 'transcript'
+          ? `<details class="note-fold"><summary>Show transcript <span class="muted">(${lines} lines)</span></summary><div class="note-text">${esc(text)}</div></details>`
+          : `<div class="note-text">${esc(text)}</div>`;
+      return `
+        <div class="note" data-kind="${k}">
+          <div class="note-head">
+            <h2 class="label">[${label}]</h2>
+            <button type="button" class="link small" data-edit="${k}">${text ? 'Edit' : `Add ${label.toLowerCase()}`}</button>
+          </div>
+          ${content}
+        </div>`;
+    }).join('') + (who ? `<p class="small muted note-by">Last edited by ${esc(who)} · ${esc(fmtShort(notes.updated_at))}</p>` : '');
+    for (const b of $$('[data-edit]', root)) b.onclick = () => edit(b.dataset.edit);
+  };
+
+  const edit = kind => {
+    const [, label, hint, rows] = NOTE_KINDS.find(n => n[0] === kind);
+    const box = $(`.note[data-kind="${kind}"]`, root);
+    box.innerHTML = `
+      <form class="note-form">
+        <div class="note-head"><h2 class="label"><label for="note-${kind}">[${label}]</label></h2></div>
+        <p class="small muted" id="note-hint-${kind}">${hint}</p>
+        <textarea id="note-${kind}" class="area" rows="${rows}" aria-describedby="note-hint-${kind}">${esc(notes[kind] || '')}</textarea>
+        <div class="row">
+          <button type="submit" class="btn">Save</button>
+          ${kind === 'transcript' ? '<label class="btn file">Load from file<input type="file" accept=".txt,.vtt,.srt,.md,text/plain,text/vtt"></label>' : ''}
+          <button type="button" class="link" data-cancel>Cancel</button>
+          <span class="state" role="status" aria-live="polite"></span>
+        </div>
+      </form>`;
+    const form = $('form', box), area = $('textarea', box), st = $('.state', box);
+    area.focus();
+    $('[data-cancel]', box).onclick = draw;
+    const file = $('input[type=file]', box);
+    if (file) file.onchange = async () => {
+      const f = file.files[0]; if (!f) return;
+      area.value = cleanTranscript(await f.text());
+      st.textContent = `Loaded ${f.name}. Check it, then Save.`;
+    };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const btn = $('button[type=submit]', form);
+      btn.disabled = true; st.textContent = 'Saving…';
+      try {
+        notes = await api.saveNotes(call.id, { [kind]: area.value.trim() });
+        draw();
+        $(`[data-edit="${kind}"]`, root)?.focus();
+      } catch (x) {
+        st.textContent = friendly(x);
+        btn.disabled = false;
+      }
+    };
+  };
+  draw();
 }
 
 const textCard = it => `

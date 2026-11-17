@@ -1,6 +1,6 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { SUPABASE_URL, SUPABASE_KEY } from './config.js?v=202611161602';
-import { processImage, extFor } from './image.js?v=202611161602';
+import { SUPABASE_URL, SUPABASE_KEY } from './config.js?v=202611171512';
+import { processImage, extFor } from './image.js?v=202611171512';
 
 // Implicit flow: the magic link works even when opened on another device/browser.
 export const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -90,6 +90,13 @@ export async function deletePhoto(photo) {
 
 export const removeFiles = (paths) =>
   sb.storage.from(BUCKET).remove(paths.filter(Boolean)).catch(() => {});
+
+// ── Call notes (summary + transcript), readable/editable after unlock ─────
+export const getNotes = (callId) =>
+  sb.from('call_notes').select('*').eq('call_id', callId).maybeSingle().then(ok);
+export const saveNotes = (callId, fields) =>
+  sb.from('call_notes').upsert({ call_id: callId, ...fields }, { onConflict: 'call_id' })
+    .select().single().then(ok);
 
 // ── Writes (admin) ──────────────────────────────────────────────────────────
 export const saveCall = (call) =>

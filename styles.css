@@ -66,6 +66,16 @@ main { padding: 0 var(--gutter); }
 .index .big { font-size: var(--big); line-height: 1.17; margin-bottom: .55em; }
 .index .big.gap { margin-top: 1em; }
 .index .next { margin-top: 26px; line-height: 1.5; }
+.notes { margin: 70px 0 10px; display: grid; gap: 40px; max-width: 760px; }
+.note-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 14px; }
+.note-head .label { margin: 0; }
+.note-text { font-size: 15px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-fold summary { cursor: pointer; font-size: 14px; padding: 4px 0; }
+.note-fold[open] summary { margin-bottom: 14px; }
+.note-fold .note-text { font-size: 13px; max-height: 60vh; overflow: auto; border-left: 1px solid var(--line); padding-left: 16px; }
+.note-form .area { width: 100%; margin: 4px 0 16px; }
+.note-form .label label { font-size: inherit; color: inherit; }
+.note-by { margin: -20px 0 0; }
 .bar .btn.fb-btn { font-size: 12px; line-height: 1.2; padding: 7px 12px; width: auto; }
 .fb-form .field { margin: 18px 0; }
 .fb-form .field label { display: block; margin-bottom: 6px; }

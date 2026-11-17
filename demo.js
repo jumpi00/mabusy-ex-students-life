@@ -162,4 +162,21 @@ export async function saveCall(c) {
 export async function deleteCall(id) { calls = calls.filter(c => c.id !== id); subs = subs.filter(s => s.call_id !== id); photos = photos.filter(p => p.call_id !== id); }
 
 // Demo images are plain URLs: no signing needed.
+// Call notes: Call_001 already has a summary and a short transcript.
+const notes = {
+  901: {
+    call_id: 901,
+    summary: '• Carla is moving to Lisbon in spring, house-warming planned for May.\n• Gauri finished the ceramics course and will bring a cup for everyone.\n• Next call: everyone shares a song from this year.',
+    transcript: '[00:00] Giampaolo: Can everyone hear me?\n[00:04] Clarice: Loud and clear!\n[00:07] Carla: Before we start: big news, I\'m moving to Lisbon.\n[00:12] Xinyi: No way, when?\n[00:14] Carla: Spring. You\'re all invited in May.',
+    updated_by: 'giampaolo@demo',
+    updated_at: new Date(now - H).toISOString(),
+  },
+};
+export const getNotes = id => later(revealed(id) && notes[id] ? { ...notes[id] } : null);
+export async function saveNotes(call_id, fields) {
+  if (!revealed(call_id)) locked();
+  notes[call_id] = { ...(notes[call_id] || { call_id, summary: '', transcript: '' }), ...fields, updated_by: 'giampaolo@demo', updated_at: new Date().toISOString() };
+  return later({ ...notes[call_id] });
+}
+
 export const signedUrls = async paths => Object.fromEntries(paths.map(p => [p, p]));
