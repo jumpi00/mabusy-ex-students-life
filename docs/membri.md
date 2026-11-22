@@ -103,7 +103,7 @@ In **Supabase → SQL Editor**:
 truncate public.calls, public.submissions, public.photos, public.call_notes restart identity;
 ```
 
-Svuota le tre tabelle e fa ripartire da 1 la numerazione interna.
+Svuota le quattro tabelle (call, risposte, foto, summary/transcript) e fa ripartire da 1 la numerazione interna.
 
 ## 2. Cancellare i file delle foto
 
