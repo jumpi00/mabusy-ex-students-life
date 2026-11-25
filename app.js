@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611251637') : await import('./api.js?v=202611251637');
-import { SITE_NAME } from './config.js?v=202611251637';
+const api = DEMO ? await import('./demo.js?v=202611251640') : await import('./api.js?v=202611251640');
+import { SITE_NAME } from './config.js?v=202611251640';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -987,7 +987,7 @@ function adminForm(call) {
   function drawQs() {
     $('#qs').innerHTML = questions.map((q, i) => `
       <div class="q-row" data-i="${i}">
-        <span class="muted qn">Q${i + 1}</span>
+        <span class="qn"><button type="button" class="q-drag" aria-label="Reorder question ${i + 1}: drag, or use the arrow keys" title="Drag to reorder">⠿</button><span class="muted">Q${i + 1}</span></span>
         <input class="line q-text" data-k="text" value="${esc(q.text)}" placeholder="Question" aria-label="Question ${i + 1}">
         <div class="q-opts">
           <select class="line" data-k="type" aria-label="Question ${i + 1} answer type">
@@ -1023,7 +1023,50 @@ function adminForm(call) {
         [questions[i - 1], questions[i]] = [questions[i], questions[i - 1]];
         drawQs();
       };
+      dragRow(row);
     }
+  }
+
+  // Drag the ⠿ handle to reorder (mouse and touch via pointer events); arrow keys on it work too.
+  function move(from, to) {
+    if (to < 0 || to >= questions.length || to === from) return false;
+    questions.splice(to, 0, questions.splice(from, 1)[0]);
+    drawQs();
+    $$('#qs .q-drag')[to]?.focus();
+    return true;
+  }
+  function dragRow(row) {
+    const h = $('.q-drag', row);
+    h.onkeydown = e => {
+      const i = Number(row.dataset.i);
+      if (e.key === 'ArrowUp' && move(i, i - 1)) e.preventDefault();
+      if (e.key === 'ArrowDown' && move(i, i + 1)) e.preventDefault();
+    };
+    h.onpointerdown = e => {
+      if (e.button) return;
+      e.preventDefault();
+      try { h.setPointerCapture(e.pointerId); } catch {}
+      const list = $('#qs');
+      const from = Number(row.dataset.i);
+      row.classList.add('dragging');
+      const onMove = ev => {
+        const others = $$('.q-row', list).filter(r => r !== row);
+        const before = others.find(r => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+        if (before) { if (row.nextElementSibling !== before) list.insertBefore(row, before); }
+        else if (list.lastElementChild !== row) list.append(row);
+      };
+      const onUp = () => {
+        h.removeEventListener('pointermove', onMove);
+        h.removeEventListener('pointerup', onUp);
+        h.removeEventListener('pointercancel', onUp);
+        row.classList.remove('dragging');
+        const to = $$('.q-row', list).indexOf(row);
+        if (!move(from, to)) drawQs();
+      };
+      h.addEventListener('pointermove', onMove);
+      h.addEventListener('pointerup', onUp);
+      h.addEventListener('pointercancel', onUp);
+    };
   }
   drawQs();
   $('#q-add').onclick = () => {
