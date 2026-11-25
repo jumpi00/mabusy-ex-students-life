@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611251650') : await import('./api.js?v=202611251650');
-import { SITE_NAME } from './config.js?v=202611251650';
+const api = DEMO ? await import('./demo.js?v=202611251653') : await import('./api.js?v=202611251653');
+import { SITE_NAME } from './config.js?v=202611251653';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
