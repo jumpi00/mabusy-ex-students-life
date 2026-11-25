@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611171517') : await import('./api.js?v=202611171517');
-import { SITE_NAME } from './config.js?v=202611171517';
+const api = DEMO ? await import('./demo.js?v=202611251635') : await import('./api.js?v=202611251635');
+import { SITE_NAME } from './config.js?v=202611251635';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -196,6 +196,8 @@ app.addEventListener('keydown', e => {
 // ── Questions ──────────────────────────────────────────────────────────────
 // { id, text, type: 'text' | 'photo' | 'link', required, multiple }
 const SELFIE = { id: 'selfie', text: 'Selfie', type: 'photo', required: true, multiple: false };
+// Recurring, optional: something worth sharing (artist, piece, book…). Added to every new call.
+const SHARE = { id: 'share', text: 'Share something that has stayed with you lately: an artist, a piece, a book, a film, a place. Use the label to say what it is and why.', type: 'link', required: false, multiple: true };
 const MULTI_MAX = 6;
 const qType = q => q.type || 'text';
 const qMax = q => (q.multiple ? MULTI_MAX : 1);
@@ -937,9 +939,10 @@ function adminForm(call) {
   const norm = q => ({ id: q.id, text: q.text ?? '', type: qType(q), required: !!q.required, multiple: !!q.multiple });
   let questions = (call?.questions || []).map(norm);
   if (!call) {
-    // New call: start from the previous call's questions, always with the selfie first.
+    // New call: start from the previous call's questions, always with the selfie first and the share-a-link last.
     questions = (state.calls[0]?.questions || []).map(norm);
     if (!questions.some(q => q.id === 'selfie')) questions.unshift({ ...SELFIE });
+    if (!questions.some(q => q.id === 'share')) questions.push({ ...SHARE });
   }
 
   app.innerHTML = `
