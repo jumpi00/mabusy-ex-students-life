@@ -388,3 +388,4 @@ select.btn.select:focus-visible { outline: 2px solid var(--fg); outline-offset: 
 .q-row.dragging { background: var(--bg); outline: 1px solid var(--line); outline-offset: 4px; position: relative; z-index: 1; }
 .q-row.dragging .q-drag { cursor: grabbing; }
 @media (max-width: 760px) { .q-drag { font-size: 20px; padding: 10px 6px; } }
+body.q-dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }

@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611251640') : await import('./api.js?v=202611251640');
-import { SITE_NAME } from './config.js?v=202611251640';
+const api = DEMO ? await import('./demo.js?v=202611251642') : await import('./api.js?v=202611251642');
+import { SITE_NAME } from './config.js?v=202611251642';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -1045,27 +1045,33 @@ function adminForm(call) {
     h.onpointerdown = e => {
       if (e.button) return;
       e.preventDefault();
-      try { h.setPointerCapture(e.pointerId); } catch {}
       const list = $('#qs');
       const from = Number(row.dataset.i);
       row.classList.add('dragging');
       const onMove = ev => {
+        // Near the top/bottom edge, scroll so long lists can be dragged end to end.
+        if (ev.clientY < 70) window.scrollBy(0, -14);
+        else if (ev.clientY > innerHeight - 130) window.scrollBy(0, 14);
         const others = $$('.q-row', list).filter(r => r !== row);
         const before = others.find(r => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
         if (before) { if (row.nextElementSibling !== before) list.insertBefore(row, before); }
         else if (list.lastElementChild !== row) list.append(row);
       };
       const onUp = () => {
-        h.removeEventListener('pointermove', onMove);
-        h.removeEventListener('pointerup', onUp);
-        h.removeEventListener('pointercancel', onUp);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
+        document.body.classList.remove('q-dragging');
         row.classList.remove('dragging');
         const to = $$('.q-row', list).indexOf(row);
         if (!move(from, to)) drawQs();
       };
-      h.addEventListener('pointermove', onMove);
-      h.addEventListener('pointerup', onUp);
-      h.addEventListener('pointercancel', onUp);
+      // Listen on the document: moving the row in the DOM drops pointer capture on the handle,
+      // which used to stop the drag after the first swap.
+      document.body.classList.add('q-dragging');
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
     };
   }
   drawQs();
