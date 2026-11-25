@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611251644') : await import('./api.js?v=202611251644');
-import { SITE_NAME } from './config.js?v=202611251644';
+const api = DEMO ? await import('./demo.js?v=202611251650') : await import('./api.js?v=202611251650');
+import { SITE_NAME } from './config.js?v=202611251650';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -987,7 +987,7 @@ function adminForm(call) {
   function drawQs() {
     $('#qs').innerHTML = questions.map((q, i) => `
       <div class="q-row" data-i="${i}">
-        <span class="muted qn">Q${i + 1}</span>
+        <span class="qn"><button type="button" class="q-drag" aria-hidden="true" tabindex="-1" title="Drag to reorder">⠿</button><span class="muted">Q${i + 1}</span></span>
         <input class="line q-text" data-k="text" value="${esc(q.text)}" placeholder="Question" aria-label="Question ${i + 1}">
         <div class="q-opts">
           <select class="line" data-k="type" aria-label="Question ${i + 1} answer type">
@@ -1022,7 +1022,44 @@ function adminForm(call) {
       const i = Number(row.dataset.i);
       $('[data-up]', row).onclick = () => move(i, i - 1, 'up');
       $('[data-down]', row).onclick = () => move(i, i + 1, 'down');
+      dragRow(row);
     }
+  }
+
+  // Drag the ⠿ handle (mouse or touch). Listeners sit on the document: moving the row in the DOM
+  // would drop pointer capture on the handle and stop the drag after the first swap.
+  function dragRow(row) {
+    const h = $('.q-drag', row);
+    h.onpointerdown = e => {
+      if (e.button) return;
+      e.preventDefault();
+      const list = $('#qs');
+      const from = Number(row.dataset.i);
+      row.classList.add('dragging');
+      document.body.classList.add('q-dragging');
+      const onMove = ev => {
+        ev.preventDefault();
+        if (ev.clientY < 70) window.scrollBy(0, -14);
+        else if (ev.clientY > innerHeight - 130) window.scrollBy(0, 14);
+        const others = $$('.q-row', list).filter(r => r !== row);
+        const before = others.find(r => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+        if (before) { if (row.nextElementSibling !== before) list.insertBefore(row, before); }
+        else if (list.lastElementChild !== row) list.append(row);
+      };
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
+        document.body.classList.remove('q-dragging');
+        row.classList.remove('dragging');
+        const to = $$('.q-row', list).indexOf(row);
+        if (to !== from) questions.splice(to, 0, questions.splice(from, 1)[0]);
+        drawQs();
+      };
+      document.addEventListener('pointermove', onMove, { passive: false });
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
+    };
   }
 
   // Move a question one place; keep focus on the same arrow so it can be pressed again.
