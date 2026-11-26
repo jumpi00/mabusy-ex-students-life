@@ -389,3 +389,22 @@ select.btn.select:focus-visible { outline: 2px solid var(--fg); outline-offset: 
 .q-row.dragging { background: var(--bg); outline: 1px solid var(--line); outline-offset: 4px; position: relative; z-index: 1; }
 body.q-dragging, body.q-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 @media (max-width: 760px) { .q-drag { font-size: 20px; padding: 10px 6px; } }
+
+/* Mobile: keep the screen free while filling in a contribution.
+   The fixed footer + = bar + submit bar took ~40% of a phone screen and covered the
+   caption fields (worse with the keyboard open). */
+@media (max-width: 760px) {
+  .top { position: static; background: var(--bg); }
+  /* Footer sits at the end of the page instead of being pinned. */
+  .footer { position: static; height: auto; }
+  body { padding-bottom: var(--bar-h); }
+  .bar { bottom: 0; }
+  .submit-bar { bottom: var(--bar-h) !important; flex-wrap: nowrap; gap: 12px; padding: 10px 0; font-size: 13px; }
+  .submit-bar .btn { width: auto; min-height: 44px; padding: 10px 20px; }
+  /* Keyboard open (a field has focus): hide the pinned bars so the field stays visible. */
+  body.typing .bar { display: none; }
+  body.typing .submit-bar { position: static; }
+  /* Footer: smaller and centred */
+  .footer { flex-direction: column; justify-content: center; text-align: center; gap: 2px; font-size: 12px; padding: 14px var(--gutter) calc(14px + env(safe-area-inset-bottom)); }
+  .footer a { padding: 6px 0; }
+}

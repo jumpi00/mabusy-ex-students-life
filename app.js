@@ -1,9 +1,13 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611251653') : await import('./api.js?v=202611251653');
-import { SITE_NAME } from './config.js?v=202611251653';
+const api = DEMO ? await import('./demo.js?v=202611262113') : await import('./api.js?v=202611262113');
+import { SITE_NAME } from './config.js?v=202611262113';
 
 const $ = (s, el = document) => el.querySelector(s);
+// While typing in a field, CSS hides the pinned bars on phones so the keyboard doesn't bury the field.
+const isTypingField = el => el?.matches?.('main input:not([type=checkbox]):not([type=radio]):not([type=file]), main textarea, main select');
+document.addEventListener('focusin', e => document.body.classList.toggle('typing', !!isTypingField(e.target)));
+document.addEventListener('focusout', () => setTimeout(() => document.body.classList.toggle('typing', !!isTypingField(document.activeElement)), 0));
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
