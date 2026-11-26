@@ -1,7 +1,7 @@
 // ?demo in the URL swaps in a fake in-memory backend (see demo.js).
 const DEMO = new URLSearchParams(location.search).has('demo');
-const api = DEMO ? await import('./demo.js?v=202611262113') : await import('./api.js?v=202611262113');
-import { SITE_NAME } from './config.js?v=202611262113';
+const api = DEMO ? await import('./demo.js?v=202611262121') : await import('./api.js?v=202611262121');
+import { SITE_NAME } from './config.js?v=202611262121';
 
 const $ = (s, el = document) => el.querySelector(s);
 // While typing in a field, CSS hides the pinned bars on phones so the keyboard doesn't bury the field.

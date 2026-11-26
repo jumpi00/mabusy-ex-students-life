@@ -408,3 +408,12 @@ body.q-dragging, body.q-dragging * { cursor: grabbing !important; user-select: n
   .footer { flex-direction: column; justify-content: center; text-align: center; gap: 2px; font-size: 12px; padding: 14px var(--gutter) calc(14px + env(safe-area-inset-bottom)); }
   .footer a { padding: 6px 0; }
 }
+
+/* Contribution form photos: one row per photo, the caption line takes all the remaining width */
+.grid.edit { grid-template-columns: 1fr; gap: 18px; }
+.grid.edit .item { grid-template-columns: 96px 1fr; grid-template-rows: auto auto 1fr; column-gap: 18px; row-gap: 8px; align-items: start; }
+.grid.edit .item .box { grid-row: 1 / 4; width: 96px; }
+.grid.edit .item .box img { width: 100%; height: auto; display: block; }
+.grid.edit .item .box.pending { grid-row: auto; width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; }
+.grid.edit .cap-in { width: 100%; align-self: end; }
+@media (max-width: 760px) { .grid.edit .item { grid-template-columns: 84px 1fr; column-gap: 14px; } .grid.edit .item .box { width: 84px; } }
