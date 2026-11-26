@@ -22,8 +22,14 @@
           </tr>
           <tr>
             <td style="padding-bottom:44px;">
-              <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=email"
+              <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=email" target="_blank"
                  style="display:inline-block;font-family:'Geist Mono',Menlo,Consolas,'Courier New',monospace;font-size:17px;color:#ffffff;background:#000000;text-decoration:none;border:1px solid #000000;padding:16px 34px;">Log in →</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="font-size:13px;line-height:1.6;color:#767676;padding-bottom:44px;word-break:break-all;">
+              Button not working? Open this link:<br>
+              <a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=email" style="color:#000000;text-decoration:underline;">{{ .RedirectTo }}?token_hash={{ .TokenHash }}&amp;type=email</a>
             </td>
           </tr>
           <tr>
